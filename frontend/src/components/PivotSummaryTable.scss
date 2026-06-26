@@ -1,0 +1,61 @@
+.pivot {
+  &__toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--space-3);
+  }
+  &__adminview {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    input { width: auto; cursor: pointer; }
+  }
+
+  &__scroll { overflow-x: auto; }
+
+  &__table {
+    th, td { white-space: nowrap; }
+
+    .pivot__group {
+      text-align: center;
+      border-left: 2px solid var(--color-border);
+      font-weight: var(--font-weight-bold);
+      color: var(--color-text);
+    }
+  }
+
+  // Total column on the right — bold, set off with a darker left divider.
+  &__totalcol {
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text);
+  }
+  .pivot__group.pivot__totalcol { border-left-color: var(--color-text-muted); }
+
+  // Divider on the left edge of the Total group (it's always the last 3 columns).
+  &__table tbody td:nth-last-child(3),
+  &__table thead tr:nth-child(2) th:nth-last-child(3) {
+    border-left: 2px solid var(--color-text-muted);
+  }
+
+  &__firstcol {
+    position: sticky;
+    left: 0;
+    background: var(--color-surface);
+    z-index: 1;
+    border-right: 2px solid var(--color-border);
+  }
+
+  // Sum row pinned at the top — bold, dark.
+  &__totalrow td {
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text);
+    background: var(--color-bg);
+    border-bottom: 2px solid var(--color-border);
+  }
+}

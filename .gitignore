@@ -1,0 +1,27 @@
+# ---- Secrets (DO NOT COMMIT) ----
+# Holds the live DB connection incl. SQL password in plaintext.
+backend/Qtm.Api/dbsettings.json
+
+# ---- .NET ----
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+
+# ---- Node / Vite (frontend) ----
+node_modules/
+frontend/dist/
+dist/
+*.log
+npm-debug.log*
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ---- Claude local plan/scratch ----
+/recover.py
+*.tmp

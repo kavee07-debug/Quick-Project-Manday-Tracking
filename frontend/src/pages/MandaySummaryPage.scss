@@ -1,0 +1,6 @@
+.msummary {
+  &__title { margin: 0 0 var(--space-2); font-size: var(--font-size-xl); }
+  &__hint { margin: 0 0 var(--space-5); font-size: var(--font-size-sm); }
+  &__projname { font-weight: var(--font-weight-regular); }
+  &__status { margin-left: var(--space-2); }
+}

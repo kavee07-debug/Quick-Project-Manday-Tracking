@@ -1,0 +1,19 @@
+.detail {
+  &__breadcrumb {
+    font-size: var(--font-size-sm);
+    margin-bottom: var(--space-2);
+  }
+  &__title {
+    margin: 0 0 var(--space-5);
+    font-size: var(--font-size-xl);
+  }
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+
+  h2 { margin: 0; font-size: var(--font-size-lg); }
+}
