@@ -83,7 +83,7 @@ export function EstimateActualTab({ projectId, projectCode }: { projectId: numbe
 
   function openAdd(taskId: number) {
     setEditingId(null);
-    setForm({ taskId, entryType: allowedTypes[0], resourceId: null, manday: 0, entryDate: null, note: '' });
+    setForm({ taskId, entryType: allowedTypes[0], resourceId: null, manday: 0, entryDate: null, startDate: null, endDate: null, note: '' });
     setFormError(null);
     setShowForm(true);
   }
@@ -96,6 +96,8 @@ export function EstimateActualTab({ projectId, projectCode }: { projectId: numbe
       resourceId: e.resourceId ?? null,
       manday: e.manday,
       entryDate: e.entryDate ?? null,
+      startDate: e.startDate ?? null,
+      endDate: e.endDate ?? null,
       note: e.note ?? '',
     });
     setFormError(null);
@@ -106,11 +108,17 @@ export function EstimateActualTab({ projectId, projectCode }: { projectId: numbe
     e.preventDefault();
     if (!form) return;
     setFormError(null);
+    if (form.startDate && form.endDate && form.endDate < form.startDate) {
+      setFormError('End Date ต้องไม่ก่อน Start Date');
+      return;
+    }
     const payload: MandayUpsert = {
       entryType: form.entryType,
       resourceId: form.resourceId ? Number(form.resourceId) : null,
       manday: form.manday,
       entryDate: form.entryDate || null,
+      startDate: form.startDate || null,
+      endDate: form.endDate || null,
       note: form.note || null,
     };
     try {
@@ -203,13 +211,15 @@ export function EstimateActualTab({ projectId, projectCode }: { projectId: numbe
                   <th>Resource</th>
                   <th>Position</th>
                   <th className="num">Manday</th>
+                  <th>Start</th>
+                  <th>End</th>
                   <th>Note</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={8} className="muted">ยังไม่มีรายการ</td></tr>
+                  <tr><td colSpan={10} className="muted">ยังไม่มีรายการ</td></tr>
                 ) : (
                   rows.map((e) => (
                     <tr key={e.mandayEntryId}>
@@ -219,6 +229,8 @@ export function EstimateActualTab({ projectId, projectCode }: { projectId: numbe
                       <td>{e.resourceName ?? '—'}</td>
                       <td><PositionBadge position={e.resourcePosition} /></td>
                       <td className="num">{fmt(e.manday)}</td>
+                      <td className="muted">{e.startDate ?? '—'}</td>
+                      <td className="muted">{e.endDate ?? '—'}</td>
                       <td className="muted">{e.note ?? ''}</td>
                       <td className="num">
                         {canEditRow(e.entryType) && (
@@ -256,6 +268,18 @@ export function EstimateActualTab({ projectId, projectCode }: { projectId: numbe
             <label className="field-label">Manday</label>
             <input className="input" type="number" step="0.5" min="0" value={form.manday}
               onChange={(ev) => setForm({ ...form, manday: Number(ev.target.value) })} required />
+
+            <label className="field-label">Start Date</label>
+            <input className="input" type="date" value={form.startDate ?? ''}
+              onChange={(ev) => {
+                const start = ev.target.value || null;
+                // Auto-fill End = Start when End is still empty; keep a manually-set End.
+                setForm({ ...form, startDate: start, endDate: form.endDate || start });
+              }} />
+
+            <label className="field-label">End Date</label>
+            <input className="input" type="date" value={form.endDate ?? ''} min={form.startDate ?? undefined}
+              onChange={(ev) => setForm({ ...form, endDate: ev.target.value || null })} />
 
             <label className="field-label">หมายเหตุ</label>
             <input className="input" value={form.note ?? ''}

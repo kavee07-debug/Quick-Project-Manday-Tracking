@@ -17,7 +17,7 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
 
     private static MandayEntryDto ToDto(MandayEntry m) =>
         new(m.MandayEntryId, m.TaskId, m.EntryType, m.ResourceId, m.Resource?.Name, m.Resource?.Position,
-            m.Manday, m.EntryDate, m.Note);
+            m.Manday, m.EntryDate, m.StartDate, m.EndDate, m.Note);
 
     /// <summary>Managers manage all types; Members may only record Actual.</summary>
     private bool CanWrite(string entryType) =>
@@ -63,6 +63,8 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
             ResourceId = req.ResourceId,
             Manday = req.Manday,
             EntryDate = req.EntryDate,
+            StartDate = req.StartDate,
+            EndDate = req.EndDate,
             Note = req.Note,
             CreatedAt = DateTime.UtcNow,
         };
@@ -87,6 +89,8 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
         m.ResourceId = req.ResourceId;
         m.Manday = req.Manday;
         m.EntryDate = req.EntryDate;
+        m.StartDate = req.StartDate;
+        m.EndDate = req.EndDate;
         m.Note = req.Note;
         m.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
@@ -112,6 +116,8 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
             return BadRequest(new { message = "EntryType must be Budget, Actual or Adjust." });
         if (req.Manday < 0)
             return BadRequest(new { message = "Manday must be zero or greater." });
+        if (req.StartDate is DateOnly sd && req.EndDate is DateOnly ed && ed < sd)
+            return BadRequest(new { message = "End Date ต้องไม่ก่อน Start Date." });
         if (req.ResourceId is int rid && !await db.Resources.AnyAsync(r => r.ResourceId == rid))
             return BadRequest(new { message = "Unknown ResourceId." });
         return null;

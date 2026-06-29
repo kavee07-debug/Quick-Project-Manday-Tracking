@@ -7,7 +7,7 @@ namespace Qtm.Api.Services;
 // against the database (codes/names -> ids) so the service stays persistence-free.
 public record ProjectRow(string Code, string Name, string? Description, string? Type, string Status, decimal? Revenue, DateOnly? StartDate, DateOnly? EndDate);
 public record TaskRow(string ProjectCode, string TaskName, string? Description, string Status, int SortOrder);
-public record MandayRow(string ProjectCode, string TaskName, string EntryType, string? ResourceName, decimal Manday, string? Note);
+public record MandayRow(string ProjectCode, string TaskName, string EntryType, string? ResourceName, decimal Manday, DateOnly? StartDate, DateOnly? EndDate, string? Note);
 
 /// <summary>Builds and parses .xlsx workbooks for Project / Task / Manday data.</summary>
 public class ExcelService
@@ -74,7 +74,7 @@ public class ExcelService
     // ---------- Mandays (Estimate & Actual) ----------
     public byte[] WriteMandays(IEnumerable<MandayRow> rows)
     {
-        var headers = new[] { "Project", "Task", "Type", "Resource", "Manday", "Note" };
+        var headers = new[] { "Project", "Task", "Type", "Resource", "Manday", "StartDate", "EndDate", "Note" };
         return Build("EstimateActual", headers, rows, (ws, r, row) =>
         {
             ws.Cell(r, 1).Value = row.ProjectCode;
@@ -82,7 +82,9 @@ public class ExcelService
             ws.Cell(r, 3).Value = row.EntryType;
             ws.Cell(r, 4).Value = row.ResourceName ?? "";
             ws.Cell(r, 5).Value = row.Manday;
-            ws.Cell(r, 6).Value = row.Note ?? "";
+            SetDate(ws.Cell(r, 6), row.StartDate);
+            SetDate(ws.Cell(r, 7), row.EndDate);
+            ws.Cell(r, 8).Value = row.Note ?? "";
         });
     }
 
@@ -94,7 +96,9 @@ public class ExcelService
             EntryType: cells(3),
             ResourceName: NullIfEmpty(cells(4)),
             Manday: ParseDecimal(cells(5)),
-            Note: NullIfEmpty(cells(6))),
+            StartDate: ParseDate(cells(6)),
+            EndDate: ParseDate(cells(7)),
+            Note: NullIfEmpty(cells(8))),
             requiredFirstCol: true);
     }
 

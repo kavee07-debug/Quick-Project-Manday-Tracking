@@ -54,12 +54,14 @@ export interface MandayEntry {
   resourcePosition?: string | null;
   manday: number;
   entryDate?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
   note?: string | null;
 }
 
 export type MandayUpsert = Pick<
   MandayEntry,
-  'entryType' | 'resourceId' | 'manday' | 'entryDate' | 'note'
+  'entryType' | 'resourceId' | 'manday' | 'entryDate' | 'startDate' | 'endDate' | 'note'
 >;
 
 export const RESOURCE_POSITIONS = ['Dev', 'SA', 'PM'] as const;

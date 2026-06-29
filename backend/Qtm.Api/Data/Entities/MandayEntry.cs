@@ -9,6 +9,8 @@ public class MandayEntry
     public int? ResourceId { get; set; }                   // nullable: Adjust rows may not map to a person
     public decimal Manday { get; set; }                    // supports half-days e.g. 1.5
     public DateOnly? EntryDate { get; set; }
+    public DateOnly? StartDate { get; set; }               // planned/actual start
+    public DateOnly? EndDate { get; set; }                 // defaults to StartDate, editable
     public string? Note { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

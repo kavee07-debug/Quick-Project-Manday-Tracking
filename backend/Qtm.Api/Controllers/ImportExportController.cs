@@ -184,7 +184,7 @@ public class ImportExportController(QtmDbContext db, ExcelService excel) : Contr
             .OrderBy(m => m.Task!.Project!.Code).ThenBy(m => m.Task!.Name).ThenBy(m => m.EntryType)
             .Select(m => new MandayRow(
                 m.Task!.Project!.Code, m.Task!.Name, m.EntryType,
-                m.Resource != null ? m.Resource.Name : null, m.Manday, m.Note))
+                m.Resource != null ? m.Resource.Name : null, m.Manday, m.StartDate, m.EndDate, m.Note))
             .ToListAsync();
         return Xlsx(excel.WriteMandays(rows), "estimate-actual.xlsx");
     }
@@ -251,11 +251,18 @@ public class ImportExportController(QtmDbContext db, ExcelService excel) : Contr
                 skipped++;
                 continue;
             }
+            if (row.StartDate is DateOnly isd && row.EndDate is DateOnly ied && ied < isd)
+            {
+                errors.Add($"แถว {line}: End Date ต้องไม่ก่อน Start Date");
+                skipped++;
+                continue;
+            }
 
             db.MandayEntries.Add(new MandayEntry
             {
                 TaskId = task.TaskId, EntryType = row.EntryType, ResourceId = resourceId,
-                Manday = row.Manday, Note = row.Note, CreatedAt = DateTime.UtcNow,
+                Manday = row.Manday, StartDate = row.StartDate, EndDate = row.EndDate,
+                Note = row.Note, CreatedAt = DateTime.UtcNow,
             });
             created++;
         }

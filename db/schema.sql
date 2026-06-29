@@ -112,6 +112,8 @@ CREATE TABLE dbo.MandayEntry (
     ResourceId    INT NULL,                   -- nullable: Adjust rows may not map to a person
     Manday        DECIMAL(9,2) NOT NULL,      -- supports half-days e.g. 1.5
     EntryDate     DATE NULL,
+    StartDate     DATE NULL,                  -- planned/actual start
+    EndDate       DATE NULL,                  -- defaults to StartDate, editable
     Note          NVARCHAR(500) NULL,
     CreatedAt     DATETIME2(0) NOT NULL CONSTRAINT DF_Manday_CreatedAt DEFAULT (SYSUTCDATETIME()),
     UpdatedAt     DATETIME2(0) NULL,

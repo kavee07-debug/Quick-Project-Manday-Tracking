@@ -17,8 +17,10 @@ public record TaskUpsert(string Name, string? Description, string Status, int So
 
 // ---- Manday ----
 public record MandayEntryDto(int MandayEntryId, int TaskId, string EntryType, int? ResourceId,
-    string? ResourceName, string? ResourcePosition, decimal Manday, DateOnly? EntryDate, string? Note);
-public record MandayUpsert(string EntryType, int? ResourceId, decimal Manday, DateOnly? EntryDate, string? Note);
+    string? ResourceName, string? ResourcePosition, decimal Manday, DateOnly? EntryDate,
+    DateOnly? StartDate, DateOnly? EndDate, string? Note);
+public record MandayUpsert(string EntryType, int? ResourceId, decimal Manday, DateOnly? EntryDate,
+    DateOnly? StartDate, DateOnly? EndDate, string? Note);
 
 // ---- Resource ----
 public record ResourceDto(int ResourceId, string Code, string Name, string? Position, bool IsActive);
