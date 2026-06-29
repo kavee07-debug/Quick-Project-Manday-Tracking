@@ -6,6 +6,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- dbsettings.json holds dev DB creds (localhost/sa) and is gitignored. Never publish it:
+       on the server its presence would override the Production connection string. -->
+  <ItemGroup>
+    <Content Update="dbsettings.json" CopyToPublishDirectory="Never" CopyToOutputDirectory="Never" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />

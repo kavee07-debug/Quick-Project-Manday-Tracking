@@ -72,12 +72,20 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 
+// Serve the built React app (wwwroot) from the same origin as the API, so no
+// reverse-proxy/CORS is needed: /api/* hits the controllers, everything else
+// falls back to index.html for client-side (SPA) routing.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.UseCors(CorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
+// SPA fallback: any non-API, non-file route returns index.html (so refreshing /projects works).
+app.MapFallbackToFile("index.html");
 
 // Bootstrap admin login account (roles themselves come from db/schema.sql).
 // Resilient: a bad/unreachable DB must not stop the app from starting — the Config page

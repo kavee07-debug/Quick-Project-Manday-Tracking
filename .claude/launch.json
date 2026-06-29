@@ -8,6 +8,14 @@
       "port": 4207,
       "autoPort": false,
       "cwd": "frontend"
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--no-launch-profile", "--urls", "http://localhost:3007"],
+      "port": 3007,
+      "autoPort": false,
+      "cwd": "backend/Qtm.Api"
     }
   ]
 }
