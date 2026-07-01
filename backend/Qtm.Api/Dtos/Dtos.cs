@@ -22,6 +22,10 @@ public record MandayEntryDto(int MandayEntryId, int TaskId, string EntryType, in
 public record MandayUpsert(string EntryType, int? ResourceId, decimal Manday, DateOnly? EntryDate,
     DateOnly? StartDate, DateOnly? EndDate, string? Note);
 
+// ---- User management (Admin) ----
+public record UserDto(int UserId, string Email, string DisplayName, bool IsActive, string[] Roles);
+public record UserUpsert(string Email, string DisplayName, bool IsActive, string[] Roles);
+
 // ---- Resource ----
 public record ResourceDto(int ResourceId, string Code, string Name, string? Position, bool IsActive);
 public record ResourceUpsert(string Code, string Name, string? Position, bool IsActive);

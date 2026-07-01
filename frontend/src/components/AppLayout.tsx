@@ -90,6 +90,11 @@ export function AppLayout() {
             </NavLink>
           )}
           {hasRole('Admin') && (
+            <NavLink to="/users" className={navItem} title="จัดการผู้ใช้">
+              <UserIcon size={20} /> <span className="sidebar__label">จัดการผู้ใช้</span>
+            </NavLink>
+          )}
+          {hasRole('Admin') && (
             <NavLink to="/config" className={navItem} title="ตั้งค่า DB">
               <GearIcon size={20} /> <span className="sidebar__label">ตั้งค่า DB</span>
             </NavLink>
