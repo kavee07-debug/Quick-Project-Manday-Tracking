@@ -90,6 +90,33 @@ Restart-WebAppPool QtmApi
 
 ---
 
+## Microsoft (Entra ID) login + roles
+
+ระบบล็อกอินได้ 2 ทาง: **Microsoft (Entra ID)** สำหรับผู้ใช้ทั่วไป + **password** สำหรับ admin เดิม (break-glass). Roles = **Admin / ProjectManager / User** (User = read-only). ผู้ใช้ต้องถูก admin เพิ่มในหน้า "จัดการผู้ใช้" ก่อน (หรืออยู่ใน `Auth:AdminEmails`) ถึงล็อกอินได้ — MS account อื่นถูกปฏิเสธ (403).
+
+**ก. Entra app registration**
+- App registration (single-tenant) → คัดลอก **Application (client) ID** + **Directory (tenant) ID**
+- **Authentication → Single-page application → Redirect URI** = URL จริงที่ผู้ใช้เปิด **ต้องเป็น `https://`** (Entra บังคับ https สำหรับ host ที่ไม่ใช่ localhost)
+  - ผ่าน **Cloudflare** ที่มี https อยู่แล้ว → ใส่ `https://<โดเมน-Cloudflare>` (โค้ดใช้ `redirectUri = window.location.origin` จึงตรงกับโดเมนที่เปิดอัตโนมัติ)
+  - ⚠️ ผู้ใช้ต้องเข้าผ่านโดเมน https เท่านั้น — ถ้าเข้าตรง `http://<ip>` redirectUri จะเป็น http แล้ว MS login พัง
+
+**ข. ใส่ค่า config**
+- Backend [appsettings.json](backend/Qtm.Api/appsettings.json) → `AzureAd: { Instance, TenantId, ClientId }` (ไม่ใช่ secret, ติดไปกับ artifact ได้) + `Auth:AdminEmails` (bootstrap admin คนแรก)
+- Frontend → `frontend/.env` (gitignored): `VITE_AAD_CLIENT_ID`, `VITE_AAD_TENANT_ID` — **ถูก bake ตอน `npm run build`** ดังนั้นเครื่องที่ build artifact ต้องมี `.env` ค่าถูก ไม่งั้นได้ค่า placeholder
+
+**ค. Migrate roles บน DB prod** (ถ้า DB มีอยู่แล้วจาก schema เก่า 4 roles)
+```sql
+UPDATE dbo.[Role] SET Name=N'User', Description=N'Read-only' WHERE Name=N'Viewer';
+-- ย้าย user ของ Member ไป User แล้วลบ role Member (ดูสคริปต์เต็มที่ทำกับ dev)
+```
+DB ติดตั้งใหม่ใช้ `db/schema.sql` ล่าสุด (3 roles) ได้เลย
+
+**ง. Cloudflare ↔ origin (IIS)**
+- อย่าให้ IIS บังคับ redirect http→https ถ้า Cloudflare เป็นโหมด **Flexible** (จะ loop) · แนะนำ **Full** หรือ **Cloudflare Tunnel**
+- ไม่ต้องตั้ง CORS (single-origin) · ใช้ localStorage ไม่ใช่ cookie (ไม่มีปัญหา SameSite)
+
+---
+
 ## Troubleshooting — gotcha จริงจาก deploy ครั้งแรก (ต้นเหตุที่กินเวลาหลายชม.)
 
 **Gotcha #1 — 500 ทุก endpoint รวม `/health`, ไม่มี stdout log, แต่ `dotnet Qtm.Api.dll` รันจาก console ได้**
