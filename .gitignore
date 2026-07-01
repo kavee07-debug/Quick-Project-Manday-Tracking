@@ -25,6 +25,11 @@ dist/
 *.log
 npm-debug.log*
 
+# ---- Env (local, may hold per-env values) ----
+.env
+.env.local
+.env.*.local
+
 # ---- OS / editor ----
 .DS_Store
 Thumbs.db

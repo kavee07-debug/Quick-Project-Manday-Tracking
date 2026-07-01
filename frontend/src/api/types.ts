@@ -6,6 +6,19 @@ export interface AuthResult {
   expiresAt: string;
 }
 
+// RBAC roles (must match backend Roles.All / dbo.[Role].Name).
+export const ROLES = ['Admin', 'ProjectManager', 'User'] as const;
+export type RoleName = (typeof ROLES)[number];
+
+export interface User {
+  userId: number;
+  email: string;
+  displayName: string;
+  isActive: boolean;
+  roles: string[];
+}
+export type UserUpsert = Pick<User, 'email' | 'displayName' | 'isActive' | 'roles'>;
+
 export const PROJECT_TYPES = ['Implement', 'Customize', 'Training', 'Other'] as const;
 export const PROJECT_STATUSES = ['Open', 'Hold', 'Completed', 'Cancel'] as const;
 

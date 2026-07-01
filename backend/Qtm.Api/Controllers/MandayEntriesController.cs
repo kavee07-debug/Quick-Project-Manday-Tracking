@@ -19,11 +19,6 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
         new(m.MandayEntryId, m.TaskId, m.EntryType, m.ResourceId, m.Resource?.Name, m.Resource?.Position,
             m.Manday, m.EntryDate, m.StartDate, m.EndDate, m.Note);
 
-    /// <summary>Managers manage all types; Members may only record Actual.</summary>
-    private bool CanWrite(string entryType) =>
-        User.IsInRole(Roles.Admin) || User.IsInRole(Roles.ProjectManager) ||
-        (User.IsInRole(Roles.Member) && entryType == "Actual");
-
     [HttpGet("tasks/{taskId:int}/mandays")]
     public async Task<ActionResult<IEnumerable<MandayEntryDto>>> List(int taskId)
     {
@@ -46,7 +41,7 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
     }
 
     [HttpPost("tasks/{taskId:int}/mandays")]
-    [Authorize(Roles = Roles.Contributors)]
+    [Authorize(Roles = Roles.Managers)]
     public async Task<ActionResult<MandayEntryDto>> Create(int taskId, MandayUpsert req)
     {
         if (!await db.Tasks.AnyAsync(t => t.TaskId == taskId))
@@ -54,7 +49,6 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
 
         var validation = await ValidateAsync(req);
         if (validation is not null) return validation;
-        if (!CanWrite(req.EntryType)) return Forbid();
 
         var m = new MandayEntry
         {
@@ -75,7 +69,7 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
     }
 
     [HttpPut("mandays/{id:int}")]
-    [Authorize(Roles = Roles.Contributors)]
+    [Authorize(Roles = Roles.Managers)]
     public async Task<ActionResult<MandayEntryDto>> Update(int id, MandayUpsert req)
     {
         var m = await db.MandayEntries.FindAsync(id);
@@ -83,7 +77,6 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
 
         var validation = await ValidateAsync(req);
         if (validation is not null) return validation;
-        if (!CanWrite(req.EntryType) || !CanWrite(m.EntryType)) return Forbid();
 
         m.EntryType = req.EntryType;
         m.ResourceId = req.ResourceId;
@@ -99,12 +92,11 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
     }
 
     [HttpDelete("mandays/{id:int}")]
-    [Authorize(Roles = Roles.Contributors)]
+    [Authorize(Roles = Roles.Managers)]
     public async Task<IActionResult> Delete(int id)
     {
         var m = await db.MandayEntries.FindAsync(id);
         if (m is null) return NotFound();
-        if (!CanWrite(m.EntryType)) return Forbid();
         db.MandayEntries.Remove(m);
         await db.SaveChangesAsync();
         return NoContent();

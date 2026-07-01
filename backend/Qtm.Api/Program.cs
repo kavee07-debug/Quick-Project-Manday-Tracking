@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Qtm.Api.Auth;
 using Qtm.Api.Data;
 using Qtm.Api.Data.Entities;
 using Qtm.Api.Services;
@@ -19,6 +20,12 @@ const string CorsPolicy = "frontend";
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? ["http://localhost:3007"];
 
+// Entra ID (Azure AD) — used to validate the Microsoft ID token at /auth/ms-login.
+var aad = builder.Configuration.GetSection("AzureAd");
+var aadInstance = (aad["Instance"] ?? "https://login.microsoftonline.com/").TrimEnd('/');
+var aadTenant = aad["TenantId"] ?? "common";
+var aadClientId = aad["ClientId"] ?? "";
+
 // ---- Services ----
 // Connection string is resolved at runtime in QtmDbContext.OnConfiguring via DbSettingsProvider,
 // so it can be reconfigured from the in-app Config page without a restart.
@@ -33,6 +40,7 @@ builder.Services.AddCors(o => o.AddPolicy(CorsPolicy, p =>
     p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    // Default scheme: the app's own JWT (issued by /auth/login and /auth/ms-login).
     .AddJwtBearer(opt =>
     {
         opt.TokenValidationParameters = new TokenValidationParameters
@@ -46,6 +54,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Key)),
             ClockSkew = TimeSpan.FromSeconds(30),
         };
+    })
+    // Second scheme: validates the Microsoft (Entra ID) ID token, used only by /auth/ms-login.
+    // ID token: issuer = {tenant}/v2.0, audience = ClientId. (TenantId/ClientId from "AzureAd".)
+    .AddJwtBearer(AuthSchemes.EntraId, opt =>
+    {
+        opt.Authority = $"{aadInstance}/{aadTenant}/v2.0";
+        opt.Audience = aadClientId;
+        opt.TokenValidationParameters.NameClaimType = "name";
     });
 builder.Services.AddAuthorization();
 

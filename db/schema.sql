@@ -179,10 +179,9 @@ GO
    Seed data (matches SOW example: SOJ0001 / Planning)
    ============================================================ */
 INSERT INTO dbo.[Role] (Name, Description) VALUES
-    (N'Admin', N'Full access'),
+    (N'Admin', N'Full access + manage users'),
     (N'ProjectManager', N'Manage projects, tasks, mandays'),
-    (N'Member', N'Record actual mandays'),
-    (N'Viewer', N'Read-only');
+    (N'User', N'Read-only');
 
 INSERT INTO dbo.Resource (Code, Name) VALUES
     (N'KAVEE', N'Kavee'),

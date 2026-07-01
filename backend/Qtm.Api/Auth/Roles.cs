@@ -5,12 +5,11 @@ public static class Roles
 {
     public const string Admin = "Admin";
     public const string ProjectManager = "ProjectManager";
-    public const string Member = "Member";
-    public const string Viewer = "Viewer";
+    public const string User = "User";           // read-only (replaces the old Viewer/Member)
 
-    /// <summary>Roles allowed to create/update/delete projects, tasks and budget/adjust mandays.</summary>
+    /// <summary>Roles allowed to create/update/delete projects, tasks, resources and all mandays.</summary>
     public const string Managers = Admin + "," + ProjectManager;
 
-    /// <summary>Roles allowed to record actual mandays (managers + members).</summary>
-    public const string Contributors = Admin + "," + ProjectManager + "," + Member;
+    /// <summary>Every role name, for validation / UI dropdowns.</summary>
+    public static readonly string[] All = [Admin, ProjectManager, User];
 }
