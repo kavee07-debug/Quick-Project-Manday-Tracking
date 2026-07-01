@@ -23,7 +23,9 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
         var budget = sums.Sum(s => s.TotalBudget);
         var adjust = sums.Sum(s => s.TotalAdjust);
         var actual = sums.Sum(s => s.TotalActual);
-        return new ProjectDto(p.ProjectId, p.Code, p.Name, p.Description, p.Type, p.Status,
+        return new ProjectDto(p.ProjectId, p.Code, p.Name, p.Description,
+            p.CustomerId, p.Customer?.Code, p.Customer?.Name,
+            p.Type, p.Status, p.Progress,
             p.Revenue, p.StartDate, p.EndDate, budget, adjust, actual, (budget + adjust) - actual);
     }
 
@@ -33,13 +35,23 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
             return c.BadRequest(new { message = "Type ต้องเป็น Implement/Customize/Training/Other" });
         if (!string.IsNullOrWhiteSpace(req.Status) && !ValidStatuses.Contains(req.Status))
             return c.BadRequest(new { message = "Status ต้องเป็น Open/Hold/Completed/Cancel" });
+        if (req.Progress is decimal pct && (pct < 0 || pct > 100))
+            return c.BadRequest(new { message = "Progress ต้องอยู่ระหว่าง 0 ถึง 100" });
+        return null;
+    }
+
+    // Rejects a CustomerId that doesn't exist. Null CustomerId (no customer) is allowed.
+    private async Task<ActionResult?> CustomerNotFound(int? customerId)
+    {
+        if (customerId is int id && !await db.Customers.AnyAsync(c => c.CustomerId == id))
+            return BadRequest(new { message = $"ไม่พบลูกค้า (CustomerId={id})" });
         return null;
     }
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ProjectDto>>> List()
     {
-        var items = await db.Projects.OrderBy(p => p.Code).ToListAsync();
+        var items = await db.Projects.Include(p => p.Customer).OrderBy(p => p.Code).ToListAsync();
         var sums = (await db.TaskMandaySummaries.ToListAsync())
             .GroupBy(s => s.ProjectId)
             .ToDictionary(g => g.Key, g => g.ToList());
@@ -49,7 +61,7 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
     [HttpGet("{id:int}")]
     public async Task<ActionResult<ProjectDto>> Get(int id)
     {
-        var p = await db.Projects.FindAsync(id);
+        var p = await db.Projects.Include(x => x.Customer).FirstOrDefaultAsync(x => x.ProjectId == id);
         if (p is null) return NotFound();
         var sums = await db.TaskMandaySummaries.Where(s => s.ProjectId == id).ToListAsync();
         return Ok(ToDto(p, sums));
@@ -74,6 +86,7 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
     public async Task<ActionResult<ProjectDto>> Create(ProjectUpsert req)
     {
         if (ValidateChoices(req, this) is { } bad) return bad;
+        if (await CustomerNotFound(req.CustomerId) is { } cbad) return cbad;
         if (await db.Projects.AnyAsync(p => p.Code == req.Code))
             return Conflict(new { message = $"Project code '{req.Code}' already exists." });
 
@@ -82,8 +95,10 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
             Code = req.Code,
             Name = req.Name,
             Description = req.Description,
+            CustomerId = req.CustomerId,
             Type = string.IsNullOrWhiteSpace(req.Type) ? null : req.Type,
             Status = string.IsNullOrWhiteSpace(req.Status) ? "Open" : req.Status,
+            Progress = req.Progress,
             Revenue = req.Revenue,
             StartDate = req.StartDate,
             EndDate = req.EndDate,
@@ -91,6 +106,7 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
         };
         db.Projects.Add(p);
         await db.SaveChangesAsync();
+        await db.Entry(p).Reference(x => x.Customer).LoadAsync();
         return CreatedAtAction(nameof(Get), new { id = p.ProjectId }, ToDto(p, []));
     }
 
@@ -99,6 +115,7 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
     public async Task<ActionResult<ProjectDto>> Update(int id, ProjectUpsert req)
     {
         if (ValidateChoices(req, this) is { } bad) return bad;
+        if (await CustomerNotFound(req.CustomerId) is { } cbad) return cbad;
         var p = await db.Projects.FindAsync(id);
         if (p is null) return NotFound();
 
@@ -108,13 +125,16 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
         p.Code = req.Code;
         p.Name = req.Name;
         p.Description = req.Description;
+        p.CustomerId = req.CustomerId;
         p.Type = string.IsNullOrWhiteSpace(req.Type) ? null : req.Type;
         p.Status = string.IsNullOrWhiteSpace(req.Status) ? "Open" : req.Status;
+        p.Progress = req.Progress;
         p.Revenue = req.Revenue;
         p.StartDate = req.StartDate;
         p.EndDate = req.EndDate;
         p.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+        await db.Entry(p).Reference(x => x.Customer).LoadAsync();
         var sums = await db.TaskMandaySummaries.Where(s => s.ProjectId == p.ProjectId).ToListAsync();
         return Ok(ToDto(p, sums));
     }

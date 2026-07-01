@@ -22,13 +22,25 @@ export type UserUpsert = Pick<User, 'email' | 'displayName' | 'isActive' | 'role
 export const PROJECT_TYPES = ['Implement', 'Customize', 'Training', 'Other'] as const;
 export const PROJECT_STATUSES = ['Open', 'Hold', 'Completed', 'Cancel'] as const;
 
+export interface Customer {
+  customerId: number;
+  code: string;
+  name: string;
+  isActive: boolean;
+}
+export type CustomerUpsert = Pick<Customer, 'code' | 'name' | 'isActive'>;
+
 export interface Project {
   projectId: number;
   code: string;
   name: string;
   description?: string | null;
+  customerId?: number | null;
+  customerCode?: string | null; // read-only (joined from Customer)
+  customerName?: string | null; // read-only (joined from Customer)
   type?: string | null;
   status: string;
+  progress?: number | null; // completion %, e.g. 70.01 (0..100)
   revenue?: number | null;
   startDate?: string | null;
   endDate?: string | null;
@@ -39,10 +51,16 @@ export interface Project {
   remaining: number;
 }
 
-// Upsert excludes id and the read-only rollups.
+// Upsert excludes id, joined customer fields, and the read-only rollups.
 export type ProjectUpsert = Omit<
   Project,
-  'projectId' | 'totalBudget' | 'totalAdjust' | 'totalActual' | 'remaining'
+  | 'projectId'
+  | 'customerCode'
+  | 'customerName'
+  | 'totalBudget'
+  | 'totalAdjust'
+  | 'totalActual'
+  | 'remaining'
 >;
 
 export interface TaskItem {

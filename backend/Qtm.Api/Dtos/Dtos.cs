@@ -4,11 +4,18 @@ namespace Qtm.Api.Dtos;
 public record LoginRequest(string Email, string Password);
 public record AuthResult(string Token, string Email, string DisplayName, string[] Roles, DateTime ExpiresAt);
 
+// ---- Customer ----
+public record CustomerDto(int CustomerId, string Code, string Name, bool IsActive);
+public record CustomerUpsert(string Code, string Name, bool IsActive);
+
 // ---- Project ----
-public record ProjectDto(int ProjectId, string Code, string Name, string? Description, string? Type, string Status,
+public record ProjectDto(int ProjectId, string Code, string Name, string? Description,
+    int? CustomerId, string? CustomerCode, string? CustomerName,
+    string? Type, string Status, decimal? Progress,
     decimal? Revenue, DateOnly? StartDate, DateOnly? EndDate,
     decimal TotalBudget, decimal TotalAdjust, decimal TotalActual, decimal Remaining);
-public record ProjectUpsert(string Code, string Name, string? Description, string? Type, string Status,
+public record ProjectUpsert(string Code, string Name, string? Description, int? CustomerId,
+    string? Type, string Status, decimal? Progress,
     decimal? Revenue, DateOnly? StartDate, DateOnly? EndDate);
 
 // ---- Task ----

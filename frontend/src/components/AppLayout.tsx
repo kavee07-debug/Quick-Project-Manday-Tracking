@@ -85,6 +85,16 @@ export function AppLayout() {
             <ChartIcon size={20} /> <span className="sidebar__label">Resource Manday Summary</span>
           </NavLink>
           {hasRole('Admin', 'ProjectManager') && (
+            <NavLink to="/progress-update" className={navItem} title="อัพเดท Progress">
+              <ChartIcon size={20} /> <span className="sidebar__label">อัพเดท Progress</span>
+            </NavLink>
+          )}
+          {hasRole('Admin', 'ProjectManager') && (
+            <NavLink to="/customers" className={navItem} title="Master Customer">
+              <PeopleIcon size={20} /> <span className="sidebar__label">Master Customer</span>
+            </NavLink>
+          )}
+          {hasRole('Admin', 'ProjectManager') && (
             <NavLink to="/resources" className={navItem} title="Master Resource">
               <PeopleIcon size={20} /> <span className="sidebar__label">Master Resource</span>
             </NavLink>

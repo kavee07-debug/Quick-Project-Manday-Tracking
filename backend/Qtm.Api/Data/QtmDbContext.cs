@@ -21,6 +21,7 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
     }
 
     public DbSet<Project> Projects => Set<Project>();
+    public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
     public DbSet<MandayEntry> MandayEntries => Set<MandayEntry>();
     public DbSet<ResourceItem> Resources => Set<ResourceItem>();
@@ -38,7 +39,20 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.Property(x => x.Name).HasMaxLength(300);
             e.Property(x => x.Type).HasMaxLength(20);
             e.Property(x => x.Status).HasMaxLength(30);
+            e.Property(x => x.Progress).HasColumnType("decimal(5,2)");
             e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
+            e.HasIndex(x => x.Code).IsUnique();
+            e.HasOne(x => x.Customer)
+                .WithMany(c => c.Projects)
+                .HasForeignKey(x => x.CustomerId);
+        });
+
+        b.Entity<Customer>(e =>
+        {
+            e.ToTable("Customer");
+            e.HasKey(x => x.CustomerId);
+            e.Property(x => x.Code).HasMaxLength(50);
+            e.Property(x => x.Name).HasMaxLength(300);
             e.HasIndex(x => x.Code).IsUnique();
         });
 

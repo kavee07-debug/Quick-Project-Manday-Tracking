@@ -111,6 +111,12 @@ UPDATE dbo.[Role] SET Name=N'User', Description=N'Read-only' WHERE Name=N'Viewer
 ```
 DB ติดตั้งใหม่ใช้ `db/schema.sql` ล่าสุด (3 roles) ได้เลย
 
+**จ. Migrate Customer + Progress บน DB prod** (ถ้า DB มีอยู่แล้วก่อนมีฟีเจอร์ลูกค้า/Progress)
+```powershell
+sqlcmd -S <DBSERVER> -U <user> -P <pwd> -C -d QtmManday -i db\migration-2026-07-customer-progress.sql
+```
+สคริปต์นี้ idempotent (รันซ้ำได้) — เพิ่มตาราง `Customer` + คอลัมน์ `Project.CustomerId` และ `Project.Progress` (DB ติดตั้งใหม่จาก `schema.sql` มีให้ครบแล้ว ไม่ต้องรัน)
+
 **ง. Cloudflare ↔ origin (IIS)**
 - อย่าให้ IIS บังคับ redirect http→https ถ้า Cloudflare เป็นโหมด **Flexible** (จะ loop) · แนะนำ **Full** หรือ **Cloudflare Tunnel**
 - ไม่ต้องตั้ง CORS (single-origin) · ใช้ localStorage ไม่ใช่ cookie (ไม่มีปัญหา SameSite)

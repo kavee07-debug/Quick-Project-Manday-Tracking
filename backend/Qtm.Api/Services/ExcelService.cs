@@ -5,9 +5,12 @@ namespace Qtm.Api.Services;
 
 // Flat row shapes used for both export and import. The controller resolves these
 // against the database (codes/names -> ids) so the service stays persistence-free.
-public record ProjectRow(string Code, string Name, string? Description, string? Type, string Status, decimal? Revenue, DateOnly? StartDate, DateOnly? EndDate);
+public record ProjectRow(string Code, string Name, string? CustomerCode, string? CustomerName, string? Description, string? Type, string Status, decimal? Progress, decimal? Revenue, DateOnly? StartDate, DateOnly? EndDate);
 public record TaskRow(string ProjectCode, string TaskName, string? Description, string Status, int SortOrder);
 public record MandayRow(string ProjectCode, string TaskName, string EntryType, string? ResourceName, decimal Manday, DateOnly? StartDate, DateOnly? EndDate, string? Note);
+// Progress update sheet — only Project No (Code), Name, Progress, Status.
+public record ProgressRow(string Code, string Name, decimal? Progress, string Status);
+public record CustomerRow(string Code, string Name, bool IsActive);
 
 /// <summary>Builds and parses .xlsx workbooks for Project / Task / Manday data.</summary>
 public class ExcelService
@@ -18,17 +21,20 @@ public class ExcelService
     // ---------- Projects ----------
     public byte[] WriteProjects(IEnumerable<ProjectRow> rows)
     {
-        var headers = new[] { "Code", "Name", "Description", "Type", "Status", "Revenue", "StartDate", "EndDate" };
+        var headers = new[] { "Code", "Name", "CustomerCode", "CustomerName", "Description", "Type", "Status", "Progress", "Revenue", "StartDate", "EndDate" };
         return Build("Projects", headers, rows, (ws, r, row) =>
         {
             ws.Cell(r, 1).Value = row.Code;
             ws.Cell(r, 2).Value = row.Name;
-            ws.Cell(r, 3).Value = row.Description ?? "";
-            ws.Cell(r, 4).Value = row.Type ?? "";
-            ws.Cell(r, 5).Value = row.Status;
-            if (row.Revenue is decimal rev) ws.Cell(r, 6).Value = rev;
-            SetDate(ws.Cell(r, 7), row.StartDate);
-            SetDate(ws.Cell(r, 8), row.EndDate);
+            ws.Cell(r, 3).Value = row.CustomerCode ?? "";
+            ws.Cell(r, 4).Value = row.CustomerName ?? "";
+            ws.Cell(r, 5).Value = row.Description ?? "";
+            ws.Cell(r, 6).Value = row.Type ?? "";
+            ws.Cell(r, 7).Value = row.Status;
+            if (row.Progress is decimal pct) ws.Cell(r, 8).Value = pct;
+            if (row.Revenue is decimal rev) ws.Cell(r, 9).Value = rev;
+            SetDate(ws.Cell(r, 10), row.StartDate);
+            SetDate(ws.Cell(r, 11), row.EndDate);
         });
     }
 
@@ -37,12 +43,59 @@ public class ExcelService
         return ReadRows(stream, cells => new ProjectRow(
             Code: cells(1),
             Name: cells(2),
-            Description: NullIfEmpty(cells(3)),
-            Type: NullIfEmpty(cells(4)),
-            Status: Default(cells(5), "Open"),
-            Revenue: ParseDecimalNullable(cells(6)),
-            StartDate: ParseDate(cells(7)),
-            EndDate: ParseDate(cells(8))),
+            CustomerCode: NullIfEmpty(cells(3)),
+            CustomerName: NullIfEmpty(cells(4)),
+            Description: NullIfEmpty(cells(5)),
+            Type: NullIfEmpty(cells(6)),
+            Status: Default(cells(7), "Open"),
+            Progress: ParseDecimalNullable(cells(8)),
+            Revenue: ParseDecimalNullable(cells(9)),
+            StartDate: ParseDate(cells(10)),
+            EndDate: ParseDate(cells(11))),
+            requiredFirstCol: true);
+    }
+
+    // ---------- Progress update (Project No, Name, Progress, Status) ----------
+    public byte[] WriteProgress(IEnumerable<ProgressRow> rows)
+    {
+        var headers = new[] { "Project No", "Name", "Progress", "Status" };
+        return Build("Progress", headers, rows, (ws, r, row) =>
+        {
+            ws.Cell(r, 1).Value = row.Code;
+            ws.Cell(r, 2).Value = row.Name;
+            if (row.Progress is decimal pct) ws.Cell(r, 3).Value = pct;
+            ws.Cell(r, 4).Value = row.Status;
+        });
+    }
+
+    public List<ProgressRow> ReadProgress(Stream stream)
+    {
+        return ReadRows(stream, cells => new ProgressRow(
+            Code: cells(1),
+            Name: cells(2),
+            Progress: ParseDecimalNullable(cells(3)),
+            Status: cells(4)),
+            requiredFirstCol: true);
+    }
+
+    // ---------- Customers ----------
+    public byte[] WriteCustomers(IEnumerable<CustomerRow> rows)
+    {
+        var headers = new[] { "Code", "Name", "IsActive" };
+        return Build("Customers", headers, rows, (ws, r, row) =>
+        {
+            ws.Cell(r, 1).Value = row.Code;
+            ws.Cell(r, 2).Value = row.Name;
+            ws.Cell(r, 3).Value = row.IsActive ? "Yes" : "No";
+        });
+    }
+
+    public List<CustomerRow> ReadCustomers(Stream stream)
+    {
+        return ReadRows(stream, cells => new CustomerRow(
+            Code: cells(1),
+            Name: cells(2),
+            IsActive: ParseBool(cells(3), fallback: true)),
             requiredFirstCol: true);
     }
 
@@ -155,6 +208,14 @@ public class ExcelService
 
     private static string? NullIfEmpty(string s) => string.IsNullOrWhiteSpace(s) ? null : s;
     private static string Default(string s, string fallback) => string.IsNullOrWhiteSpace(s) ? fallback : s;
+
+    // Accepts Yes/No, True/False, 1/0, Active/Inactive (case-insensitive). Empty -> fallback.
+    private static bool ParseBool(string s, bool fallback)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return fallback;
+        var v = s.Trim().ToLowerInvariant();
+        return v is "yes" or "y" or "true" or "1" or "active";
+    }
 
     private static int ParseInt(string s) =>
         int.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : 0;

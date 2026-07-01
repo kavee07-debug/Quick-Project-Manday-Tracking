@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
-import { PROJECT_STATUSES, PROJECT_TYPES, type Project, type ProjectUpsert } from '../api/types';
+import {
+  PROJECT_STATUSES,
+  PROJECT_TYPES,
+  type Customer,
+  type Project,
+  type ProjectUpsert,
+} from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../components/Modal';
 import { ImportExportBar } from '../components/ImportExportBar';
+import { ProgressBar } from '../components/ProgressBar';
 import { StatusBadge } from '../components/StatusBadge';
 import './ProjectListPage.scss';
 
@@ -16,12 +23,19 @@ function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
+// #7 — "New Project" button label follows the browser language (no full i18n framework yet).
+const newProjectLabel = navigator.language.toLowerCase().startsWith('th')
+  ? '+ เพิ่มโปรเจกต์'
+  : '+ New Project';
+
 const empty: ProjectUpsert = {
   code: '',
   name: '',
   description: '',
+  customerId: null,
   type: 'Implement',
   status: 'Open',
+  progress: null,
   revenue: null,
   startDate: null,
   endDate: null,
@@ -33,6 +47,7 @@ export default function ProjectListPage() {
   const [searchParams] = useSearchParams();
   const query = (searchParams.get('q') ?? '').trim().toLowerCase();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +70,8 @@ export default function ProjectListPage() {
 
   useEffect(() => {
     load();
+    // Active customers for the project form dropdown.
+    api.get<Customer[]>('/customers').then(setCustomers).catch(() => setCustomers([]));
   }, []);
 
   const filtered = useMemo(
@@ -93,8 +110,10 @@ export default function ProjectListPage() {
       code: p.code,
       name: p.name,
       description: p.description ?? '',
+      customerId: p.customerId ?? null,
       type: p.type ?? '',
       status: p.status,
+      progress: p.progress ?? null,
       revenue: p.revenue ?? null,
       startDate: p.startDate ?? null,
       endDate: p.endDate ?? null,
@@ -132,7 +151,7 @@ export default function ProjectListPage() {
         <h1>Projects{query && <span className="muted"> · ค้นหา “{query}”</span>}</h1>
         {isManager && (
           <button className="btn btn--primary" onClick={openCreate}>
-            + เพิ่มโปรเจกต์
+            {newProjectLabel}
           </button>
         )}
       </div>
@@ -174,8 +193,10 @@ export default function ProjectListPage() {
             <tr>
               <th className="nowrap">รหัส</th>
               <th>ชื่อ</th>
+              <th>ลูกค้า</th>
               <th>ประเภท</th>
               <th>สถานะ</th>
+              <th style={{ minWidth: 160 }}>Progress</th>
               <th className="num">Revenue</th>
               <th className="num">Sum Budget</th>
               <th className="num">Sum Adjust</th>
@@ -186,9 +207,9 @@ export default function ProjectListPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={10} className="muted">กำลังโหลด…</td></tr>
+              <tr><td colSpan={12} className="muted">กำลังโหลด…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={10} className="muted">{query ? 'ไม่พบโปรเจกต์ที่ค้นหา' : 'ยังไม่มีโปรเจกต์'}</td></tr>
+              <tr><td colSpan={12} className="muted">{query ? 'ไม่พบโปรเจกต์ที่ค้นหา' : 'ยังไม่มีโปรเจกต์'}</td></tr>
             ) : (
               filtered.map((p) => (
                 <tr key={p.projectId}>
@@ -198,8 +219,10 @@ export default function ProjectListPage() {
                     </a>
                   </td>
                   <td>{p.name}</td>
+                  <td>{p.customerName ? `${p.customerCode} · ${p.customerName}` : '—'}</td>
                   <td>{p.type ?? '—'}</td>
                   <td><StatusBadge status={p.status} /></td>
+                  <td><ProgressBar value={p.progress} /></td>
                   <td className="num">{p.revenue != null ? fmt(p.revenue) : '—'}</td>
                   <td className="num">{fmt(p.totalBudget)}</td>
                   <td className="num">{fmt(p.totalAdjust)}</td>
@@ -235,6 +258,15 @@ export default function ProjectListPage() {
             <input className="input" value={form.description ?? ''}
               onChange={(e) => setForm({ ...form, description: e.target.value })} />
 
+            <label className="field-label">ลูกค้า (Customer)</label>
+            <select className="input" value={form.customerId ?? ''}
+              onChange={(e) => setForm({ ...form, customerId: e.target.value === '' ? null : Number(e.target.value) })}>
+              <option value="">— ไม่ระบุ —</option>
+              {customers.map((c) => (
+                <option key={c.customerId} value={c.customerId}>{c.code} · {c.name}</option>
+              ))}
+            </select>
+
             <label className="field-label">ประเภท (Type)</label>
             <select className="input" value={form.type ?? ''}
               onChange={(e) => setForm({ ...form, type: e.target.value })}>
@@ -246,6 +278,10 @@ export default function ProjectListPage() {
               onChange={(e) => setForm({ ...form, status: e.target.value })}>
               {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
+
+            <label className="field-label">Progress (%)</label>
+            <input className="input" type="number" step="0.01" min="0" max="100" value={form.progress ?? ''}
+              onChange={(e) => setForm({ ...form, progress: e.target.value === '' ? null : Number(e.target.value) })} />
 
             <label className="field-label">มูลค่าโครงการ (Revenue)</label>
             <input className="input" type="number" step="0.01" min="0" value={form.revenue ?? ''}

@@ -8,6 +8,8 @@ import ProjectDetailPage from './pages/ProjectDetailPage';
 import MandaySummaryPage from './pages/MandaySummaryPage';
 import ResourceMandaySummaryPage from './pages/ResourceMandaySummaryPage';
 import ResourcePage from './pages/ResourcePage';
+import CustomersPage from './pages/CustomersPage';
+import ProgressUpdatePage from './pages/ProgressUpdatePage';
 import UsersPage from './pages/UsersPage';
 import ConfigPage from './pages/ConfigPage';
 
@@ -32,6 +34,8 @@ export default function App() {
         <Route path="/manday-summary" element={<MandaySummaryPage />} />
         <Route path="/resource-manday-summary" element={<ResourceMandaySummaryPage />} />
         <Route path="/resources" element={<ResourcePage />} />
+        <Route path="/customers" element={<CustomersPage />} />
+        <Route path="/progress-update" element={<ProgressUpdatePage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/config" element={<ConfigPage />} />
         <Route path="/" element={<Navigate to="/projects" replace />} />

@@ -30,8 +30,11 @@ public class ImportExportController(QtmDbContext db, ExcelService excel) : Contr
     [HttpGet("export/projects")]
     public async Task<IActionResult> ExportProjects()
     {
-        var rows = await db.Projects.OrderBy(p => p.Code)
-            .Select(p => new ProjectRow(p.Code, p.Name, p.Description, p.Type, p.Status, p.Revenue, p.StartDate, p.EndDate))
+        var rows = await db.Projects.Include(p => p.Customer).OrderBy(p => p.Code)
+            .Select(p => new ProjectRow(p.Code, p.Name,
+                p.Customer != null ? p.Customer.Code : null,
+                p.Customer != null ? p.Customer.Name : null,
+                p.Description, p.Type, p.Status, p.Progress, p.Revenue, p.StartDate, p.EndDate))
             .ToListAsync();
         return Xlsx(excel.WriteProjects(rows), "projects.xlsx");
     }
@@ -44,6 +47,11 @@ public class ImportExportController(QtmDbContext db, ExcelService excel) : Contr
 
         List<ProjectRow> rows;
         using (var s = file.OpenReadStream()) rows = excel.ReadProjects(s);
+
+        // Cache customers by code (case-insensitive). Auto-created customers are added here too,
+        // so repeated codes within one import resolve to the same new customer.
+        var customers = (await db.Customers.ToListAsync())
+            .ToDictionary(c => c.Code, c => c, StringComparer.OrdinalIgnoreCase);
 
         int created = 0, updated = 0, skipped = 0;
         var errors = new List<string>();
@@ -72,6 +80,30 @@ public class ImportExportController(QtmDbContext db, ExcelService excel) : Contr
                 skipped++;
                 continue;
             }
+            if (row.Progress is decimal pct && (pct < 0 || pct > 100))
+            {
+                errors.Add($"แถว {line}: Progress ต้องอยู่ระหว่าง 0 ถึง 100 (พบ '{row.Progress}')");
+                skipped++;
+                continue;
+            }
+
+            // Resolve customer by code; auto-create it if the code is new (name falls back to code).
+            Customer? customer = null;
+            if (!string.IsNullOrWhiteSpace(row.CustomerCode))
+            {
+                if (!customers.TryGetValue(row.CustomerCode, out customer))
+                {
+                    customer = new Customer
+                    {
+                        Code = row.CustomerCode.Trim(),
+                        Name = string.IsNullOrWhiteSpace(row.CustomerName) ? row.CustomerCode.Trim() : row.CustomerName.Trim(),
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                    };
+                    db.Customers.Add(customer);
+                    customers[customer.Code] = customer;
+                }
+            }
 
             var existing = await db.Projects.FirstOrDefaultAsync(p => p.Code == row.Code);
             if (existing is null)
@@ -79,8 +111,8 @@ public class ImportExportController(QtmDbContext db, ExcelService excel) : Contr
                 db.Projects.Add(new Project
                 {
                     Code = row.Code, Name = row.Name, Description = row.Description,
-                    Type = type, Status = status, Revenue = row.Revenue,
-                    StartDate = row.StartDate, EndDate = row.EndDate,
+                    Customer = customer, Type = type, Status = status, Progress = row.Progress,
+                    Revenue = row.Revenue, StartDate = row.StartDate, EndDate = row.EndDate,
                     CreatedAt = DateTime.UtcNow,
                 });
                 created++;
@@ -89,11 +121,135 @@ public class ImportExportController(QtmDbContext db, ExcelService excel) : Contr
             {
                 existing.Name = row.Name;
                 existing.Description = row.Description;
+                if (customer is not null) existing.Customer = customer;
                 existing.Type = type;
                 existing.Status = status;
+                existing.Progress = row.Progress;
                 existing.Revenue = row.Revenue;
                 existing.StartDate = row.StartDate;
                 existing.EndDate = row.EndDate;
+                existing.UpdatedAt = DateTime.UtcNow;
+                updated++;
+            }
+        }
+
+        await db.SaveChangesAsync();
+        return Ok(new ImportResult(created, updated, skipped, errors));
+    }
+
+    // ==================== Progress update (Code, Name, Progress, Status) ====================
+    [HttpGet("export/progress")]
+    public async Task<IActionResult> ExportProgress()
+    {
+        var rows = await db.Projects.OrderBy(p => p.Code)
+            .Select(p => new ProgressRow(p.Code, p.Name, p.Progress, p.Status))
+            .ToListAsync();
+        return Xlsx(excel.WriteProgress(rows), "progress.xlsx");
+    }
+
+    // Updates Progress (+ Status) of existing projects, matched by Code. Name is informational only.
+    [HttpPost("import/progress")]
+    [Authorize(Roles = Roles.Managers)]
+    public async Task<ActionResult<ImportResult>> ImportProgress(IFormFile file)
+    {
+        if (file is null || file.Length == 0) return BadRequest(new { message = "No file uploaded." });
+
+        List<ProgressRow> rows;
+        using (var s = file.OpenReadStream()) rows = excel.ReadProgress(s);
+
+        int updated = 0, skipped = 0;
+        var errors = new List<string>();
+        var line = 1;
+
+        foreach (var row in rows)
+        {
+            line++;
+            if (string.IsNullOrWhiteSpace(row.Code))
+            {
+                errors.Add($"แถว {line}: ต้องมี Project No");
+                skipped++;
+                continue;
+            }
+            if (row.Progress is decimal pct && (pct < 0 || pct > 100))
+            {
+                errors.Add($"แถว {line}: Progress ต้องอยู่ระหว่าง 0 ถึง 100 (พบ '{row.Progress}')");
+                skipped++;
+                continue;
+            }
+            var status = row.Status?.Trim();
+            if (!string.IsNullOrWhiteSpace(status) && !ValidProjectStatuses.Contains(status))
+            {
+                errors.Add($"แถว {line}: Status ต้องเป็น Open/Hold/Completed/Cancel (พบ '{row.Status}')");
+                skipped++;
+                continue;
+            }
+
+            var project = await db.Projects.FirstOrDefaultAsync(p => p.Code == row.Code);
+            if (project is null)
+            {
+                errors.Add($"แถว {line}: ไม่พบโปรเจกต์ '{row.Code}'");
+                skipped++;
+                continue;
+            }
+
+            project.Progress = row.Progress;
+            if (!string.IsNullOrWhiteSpace(status)) project.Status = status;
+            project.UpdatedAt = DateTime.UtcNow;
+            updated++;
+        }
+
+        await db.SaveChangesAsync();
+        return Ok(new ImportResult(0, updated, skipped, errors));
+    }
+
+    // ============================ Customers ============================
+    [HttpGet("export/customers")]
+    public async Task<IActionResult> ExportCustomers()
+    {
+        var rows = await db.Customers.OrderBy(c => c.Code)
+            .Select(c => new CustomerRow(c.Code, c.Name, c.IsActive))
+            .ToListAsync();
+        return Xlsx(excel.WriteCustomers(rows), "customers.xlsx");
+    }
+
+    // Upsert customers by Code.
+    [HttpPost("import/customers")]
+    [Authorize(Roles = Roles.Managers)]
+    public async Task<ActionResult<ImportResult>> ImportCustomers(IFormFile file)
+    {
+        if (file is null || file.Length == 0) return BadRequest(new { message = "No file uploaded." });
+
+        List<CustomerRow> rows;
+        using (var s = file.OpenReadStream()) rows = excel.ReadCustomers(s);
+
+        int created = 0, updated = 0, skipped = 0;
+        var errors = new List<string>();
+        var line = 1;
+
+        foreach (var row in rows)
+        {
+            line++;
+            if (string.IsNullOrWhiteSpace(row.Code) || string.IsNullOrWhiteSpace(row.Name))
+            {
+                errors.Add($"แถว {line}: ต้องมี Code และ Name");
+                skipped++;
+                continue;
+            }
+
+            var existing = await db.Customers.FirstOrDefaultAsync(c => c.Code == row.Code);
+            if (existing is null)
+            {
+                db.Customers.Add(new Customer
+                {
+                    Code = row.Code.Trim(), Name = row.Name.Trim(), IsActive = row.IsActive,
+                    CreatedAt = DateTime.UtcNow,
+                });
+                created++;
+            }
+            else
+            {
+                existing.Name = row.Name.Trim();
+                existing.IsActive = row.IsActive;
                 existing.UpdatedAt = DateTime.UtcNow;
                 updated++;
             }

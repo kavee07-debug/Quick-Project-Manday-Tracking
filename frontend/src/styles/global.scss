@@ -153,8 +153,10 @@ button {
   &--pm  { background: var(--color-adjust); }     // PM = orange
 
   // Generic colors (e.g. project status)
-  &--red  { background: var(--color-danger); }
-  &--blue { background: var(--color-primary); }
+  &--red    { background: var(--color-danger); }
+  &--blue   { background: var(--color-primary); }
+  &--green  { background: var(--color-success); }
+  &--orange { background: var(--color-warning); }
 }
 
 .input, select.input {

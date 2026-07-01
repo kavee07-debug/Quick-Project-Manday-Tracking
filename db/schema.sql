@@ -14,7 +14,8 @@ GO
 /* ---------- Drop in dependency order (for re-runs) ---------- */
 IF OBJECT_ID(N'dbo.MandayEntry', N'U')  IS NOT NULL DROP TABLE dbo.MandayEntry;
 IF OBJECT_ID(N'dbo.Task', N'U')         IS NOT NULL DROP TABLE dbo.Task;
-IF OBJECT_ID(N'dbo.Project', N'U')      IS NOT NULL DROP TABLE dbo.Project;
+IF OBJECT_ID(N'dbo.Project', N'U')      IS NOT NULL DROP TABLE dbo.Project;   -- FK -> Customer, drop before Customer
+IF OBJECT_ID(N'dbo.Customer', N'U')     IS NOT NULL DROP TABLE dbo.Customer;
 IF OBJECT_ID(N'dbo.Resource', N'U')     IS NOT NULL DROP TABLE dbo.Resource;
 IF OBJECT_ID(N'dbo.UserRole', N'U')     IS NOT NULL DROP TABLE dbo.UserRole;
 IF OBJECT_ID(N'dbo.[Role]', N'U')       IS NOT NULL DROP TABLE dbo.[Role];
@@ -70,6 +71,20 @@ CREATE TABLE dbo.Resource (
 GO
 
 /* ============================================================
+   Customer master (owns projects)
+   ============================================================ */
+CREATE TABLE dbo.Customer (
+    CustomerId    INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Customer PRIMARY KEY,
+    Code          NVARCHAR(50) NOT NULL,      -- business key, e.g. CUST001
+    Name          NVARCHAR(300) NOT NULL,
+    IsActive      BIT NOT NULL CONSTRAINT DF_Customer_IsActive DEFAULT (1),
+    CreatedAt     DATETIME2(0) NOT NULL CONSTRAINT DF_Customer_CreatedAt DEFAULT (SYSUTCDATETIME()),
+    UpdatedAt     DATETIME2(0) NULL,
+    CONSTRAINT UQ_Customer_Code UNIQUE (Code)
+);
+GO
+
+/* ============================================================
    Project -> Task -> MandayEntry
    ============================================================ */
 CREATE TABLE dbo.Project (
@@ -77,17 +92,23 @@ CREATE TABLE dbo.Project (
     Code          NVARCHAR(50) NOT NULL,      -- business key, e.g. SOJ0001
     Name          NVARCHAR(300) NOT NULL,
     Description   NVARCHAR(MAX) NULL,
+    CustomerId    INT NULL,                   -- owning customer (nullable)
     Type          NVARCHAR(20) NULL,          -- Implement | Customize | Training | Other
     Status        NVARCHAR(30) NOT NULL CONSTRAINT DF_Project_Status DEFAULT (N'Open'),
+    Progress      DECIMAL(5,2) NULL,          -- completion %, e.g. 70.01 (0..100)
     Revenue       DECIMAL(18,2) NULL,         -- project value / revenue
     StartDate     DATE NULL,
     EndDate       DATE NULL,
     CreatedAt     DATETIME2(0) NOT NULL CONSTRAINT DF_Project_CreatedAt DEFAULT (SYSUTCDATETIME()),
     UpdatedAt     DATETIME2(0) NULL,
-    CONSTRAINT UQ_Project_Code   UNIQUE (Code),
-    CONSTRAINT CK_Project_Type   CHECK (Type IS NULL OR Type IN (N'Implement', N'Customize', N'Training', N'Other')),
-    CONSTRAINT CK_Project_Status CHECK (Status IN (N'Open', N'Hold', N'Completed', N'Cancel'))
+    CONSTRAINT UQ_Project_Code     UNIQUE (Code),
+    CONSTRAINT FK_Project_Customer FOREIGN KEY (CustomerId) REFERENCES dbo.Customer(CustomerId),
+    CONSTRAINT CK_Project_Type     CHECK (Type IS NULL OR Type IN (N'Implement', N'Customize', N'Training', N'Other')),
+    CONSTRAINT CK_Project_Status   CHECK (Status IN (N'Open', N'Hold', N'Completed', N'Cancel')),
+    CONSTRAINT CK_Project_Progress CHECK (Progress IS NULL OR (Progress >= 0 AND Progress <= 100))
 );
+GO
+CREATE INDEX IX_Project_CustomerId ON dbo.Project(CustomerId);
 GO
 
 CREATE TABLE dbo.Task (
@@ -187,8 +208,13 @@ INSERT INTO dbo.Resource (Code, Name) VALUES
     (N'KAVEE', N'Kavee'),
     (N'BHAVIT', N'Bhavit');
 
-INSERT INTO dbo.Project (Code, Name, Type, Status) VALUES
-    (N'SOJ0001', N'Sample Project SOJ0001', N'Implement', N'Open');
+INSERT INTO dbo.Customer (Code, Name) VALUES
+    (N'CUST001', N'Sample Customer Co., Ltd.');
+
+DECLARE @CustomerId INT = (SELECT CustomerId FROM dbo.Customer WHERE Code = N'CUST001');
+
+INSERT INTO dbo.Project (Code, Name, CustomerId, Type, Status, Progress) VALUES
+    (N'SOJ0001', N'Sample Project SOJ0001', @CustomerId, N'Implement', N'Open', 70.01);
 
 DECLARE @ProjectId INT = (SELECT ProjectId FROM dbo.Project WHERE Code = N'SOJ0001');
 
