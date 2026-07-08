@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { ChartIcon, GearIcon, GridIcon, LogoutIcon, MenuIcon, PeopleIcon, SearchIcon, UserIcon } from './icons';
+import { ChartIcon, GearIcon, GridIcon, LogoutIcon, MenuIcon, PeopleIcon, PlugIcon, SearchIcon, UserIcon } from './icons';
 import './AppLayout.scss';
 
 const SIDEBAR_KEY = 'qtm.sidebar';
@@ -108,6 +108,19 @@ export function AppLayout() {
             <NavLink to="/config" className={navItem} title="ตั้งค่า DB">
               <GearIcon size={20} /> <span className="sidebar__label">ตั้งค่า DB</span>
             </NavLink>
+          )}
+          {hasRole('Admin') && (
+            <>
+              <div className="sidebar__section" title="API">
+                <span className="sidebar__label">API</span>
+              </div>
+              <NavLink to="/d365/setup" className={navItem} title="ตั้งค่า API (BC)">
+                <PlugIcon size={20} /> <span className="sidebar__label">ตั้งค่า API (BC)</span>
+              </NavLink>
+              <NavLink to="/d365/jobs" className={navItem} title="API Job">
+                <PlugIcon size={20} /> <span className="sidebar__label">API Job</span>
+              </NavLink>
+            </>
           )}
         </nav>
 

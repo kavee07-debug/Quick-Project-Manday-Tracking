@@ -139,6 +139,64 @@ export interface DbTestResult {
   message?: string | null;
 }
 
+// ---- D365BC integration ----
+export interface D365Setting {
+  tenantId: string;
+  environmentId: string;
+  companyId: string;
+  clientId: string;
+  hasClientSecret: boolean;
+  apiPublisher: string;
+  apiGroup: string;
+  apiVersion: string;
+  projectManagerCodes: string;
+}
+
+export interface D365SettingUpsert {
+  tenantId: string;
+  environmentId: string;
+  companyId: string;
+  clientId: string;
+  clientSecret?: string | null; // blank keeps the stored secret
+  apiPublisher: string;
+  apiGroup: string;
+  apiVersion: string;
+  projectManagerCodes: string;
+}
+
+export interface D365TestResult {
+  success: boolean;
+  message: string;
+}
+
+export interface D365StagingRow {
+  stagingId: number;
+  jobNo: string;
+  projectName?: string | null;
+  projectManagerCode?: string | null;
+  customerNo?: string | null;
+  customerName?: string | null;
+  type?: string | null;
+  revenue?: number | null;
+  fetchedAt: string;
+  alreadyExists: boolean;
+  existingProjectId?: number | null;
+}
+
+export interface D365FetchResult {
+  fetched: number;
+  inserted: number;
+  updated: number;
+  maxCodeUsed: string;
+  errors: string[];
+}
+
+export interface CreateProjectsResult {
+  created: number;
+  skipped: number;
+  errors: string[];
+}
+
 export interface MandaySummaryCell {
   position: string;
   budgetAdjust: number;

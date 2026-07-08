@@ -53,6 +53,23 @@ public record DbConfigUpsert(string Server, string Database, bool IntegratedSecu
     string? Password, bool TrustServerCertificate, bool Encrypt);
 public record DbTestResult(bool Success, string? Message);
 
+// ---- D365BC integration ----
+// ClientSecret is never returned; HasClientSecret tells the UI whether one is already stored.
+public record D365SettingDto(string TenantId, string EnvironmentId, string CompanyId, string ClientId,
+    bool HasClientSecret, string ApiPublisher, string ApiGroup, string ApiVersion, string ProjectManagerCodes);
+// On save/test: leave ClientSecret empty to keep the currently-stored one.
+public record D365SettingUpsert(string TenantId, string EnvironmentId, string CompanyId, string ClientId,
+    string? ClientSecret, string ApiPublisher, string ApiGroup, string ApiVersion, string ProjectManagerCodes);
+public record D365TestResult(bool Success, string Message);
+public record D365StagingDto(int StagingId, string JobNo, string? ProjectName, string? ProjectManagerCode,
+    string? CustomerNo, string? CustomerName, string? Type, decimal? Revenue,
+    DateTime FetchedAt, bool AlreadyExists, int? ExistingProjectId);
+public record D365StagingUpsert(string JobNo, string? ProjectName, string? CustomerNo, string? CustomerName,
+    string? Type, decimal? Revenue);
+public record D365FetchResult(int Fetched, int Inserted, int Updated, string MaxCodeUsed, List<string> Errors);
+public record CreateProjectsResult(int Created, int Skipped, List<string> Errors);
+public record DeleteStagingRequest(int[] Ids);
+
 // ---- Manday Summary (pivot: project × resource position) ----
 public record MandaySummaryCell(string Position, decimal BudgetAdjust, decimal Actual, decimal Remaining);
 public record MandaySummaryRow(int ProjectId, string Code, string Name, string Status, MandaySummaryCell[] Cells);

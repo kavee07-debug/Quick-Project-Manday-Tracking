@@ -20,8 +20,10 @@ IF OBJECT_ID(N'dbo.Resource', N'U')     IS NOT NULL DROP TABLE dbo.Resource;
 IF OBJECT_ID(N'dbo.UserRole', N'U')     IS NOT NULL DROP TABLE dbo.UserRole;
 IF OBJECT_ID(N'dbo.[Role]', N'U')       IS NOT NULL DROP TABLE dbo.[Role];
 IF OBJECT_ID(N'dbo.[User]', N'U')       IS NOT NULL DROP TABLE dbo.[User];
-IF OBJECT_ID(N'dbo.AppConfig', N'U')    IS NOT NULL DROP TABLE dbo.AppConfig;
-IF OBJECT_ID(N'dbo.D365SyncLog', N'U')  IS NOT NULL DROP TABLE dbo.D365SyncLog;
+IF OBJECT_ID(N'dbo.AppConfig', N'U')        IS NOT NULL DROP TABLE dbo.AppConfig;
+IF OBJECT_ID(N'dbo.D365SyncLog', N'U')       IS NOT NULL DROP TABLE dbo.D365SyncLog;
+IF OBJECT_ID(N'dbo.D365ProjectStaging', N'U') IS NOT NULL DROP TABLE dbo.D365ProjectStaging;
+IF OBJECT_ID(N'dbo.D365BcSetting', N'U')      IS NOT NULL DROP TABLE dbo.D365BcSetting;
 GO
 
 /* ============================================================
@@ -162,7 +164,7 @@ CREATE TABLE dbo.AppConfig (
 GO
 
 /* ============================================================
-   D365BC integration — mock sync log (real integration later)
+   D365BC integration — sync log (fetch attempts)
    ============================================================ */
 CREATE TABLE dbo.D365SyncLog (
     SyncId        INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_D365SyncLog PRIMARY KEY,
@@ -172,6 +174,52 @@ CREATE TABLE dbo.D365SyncLog (
     Message       NVARCHAR(MAX) NULL,
     PayloadJson   NVARCHAR(MAX) NULL,
     CreatedAt     DATETIME2(0) NOT NULL CONSTRAINT DF_D365_CreatedAt DEFAULT (SYSUTCDATETIME())
+);
+GO
+
+/* ------------------------------------------------------------
+   D365BC connection settings — single row (Id = 1).
+   ClientSecret stored plaintext (dev-acceptable; encrypt at rest for prod).
+   Base URL / token scope / job entity-set / projects path are constants in code.
+   ------------------------------------------------------------ */
+CREATE TABLE dbo.D365BcSetting (
+    Id                  INT NOT NULL CONSTRAINT PK_D365BcSetting PRIMARY KEY,   -- always 1
+    TenantId            NVARCHAR(100)  NOT NULL CONSTRAINT DF_D365Set_Tenant   DEFAULT (N''),
+    EnvironmentId       NVARCHAR(100)  NOT NULL CONSTRAINT DF_D365Set_Env      DEFAULT (N''),
+    CompanyId           NVARCHAR(100)  NOT NULL CONSTRAINT DF_D365Set_Company  DEFAULT (N''),
+    ClientId            NVARCHAR(200)  NOT NULL CONSTRAINT DF_D365Set_ClientId DEFAULT (N''),
+    ClientSecret        NVARCHAR(400)  NOT NULL CONSTRAINT DF_D365Set_Secret   DEFAULT (N''),
+    ApiPublisher        NVARCHAR(100)  NOT NULL CONSTRAINT DF_D365Set_Pub      DEFAULT (N''),
+    ApiGroup            NVARCHAR(100)  NOT NULL CONSTRAINT DF_D365Set_Group    DEFAULT (N''),
+    ApiVersion          NVARCHAR(20)   NOT NULL CONSTRAINT DF_D365Set_Ver      DEFAULT (N''),
+    ProjectManagerCodes NVARCHAR(200)  NOT NULL CONSTRAINT DF_D365Set_PmCodes  DEFAULT (N'Q63-036,Q63-041'),
+    UpdatedAt           DATETIME2(0)   NOT NULL CONSTRAINT DF_D365Set_Updated  DEFAULT (SYSUTCDATETIME()),
+    CONSTRAINT CK_D365BcSetting_SingleRow CHECK (Id = 1)
+);
+GO
+-- Seed the single settings row (empty — configure via the API Setup screen).
+INSERT INTO dbo.D365BcSetting (Id, ApiVersion) VALUES (1, N'v1.0');
+GO
+
+/* ------------------------------------------------------------
+   D365BC project staging — rows pulled from BC, editable before
+   being promoted to dbo.Project. JobNo becomes Project.Code.
+   ------------------------------------------------------------ */
+CREATE TABLE dbo.D365ProjectStaging (
+    StagingId           INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_D365ProjectStaging PRIMARY KEY,
+    JobNo               NVARCHAR(50)  NOT NULL,      -- BC "no", becomes Project.Code
+    ProjectName         NVARCHAR(300) NULL,
+    BcJobId             NVARCHAR(100) NULL,          -- BC job id (GUID) used to fetch the name
+    ProjectManagerCode  NVARCHAR(50)  NULL,
+    CustomerNo          NVARCHAR(50)  NULL,          -- becomes Customer.Code (auto-created on promote)
+    CustomerName        NVARCHAR(300) NULL,
+    Type                NVARCHAR(20)  NULL,          -- Project.Type (auto-suggested from name)
+    Revenue             DECIMAL(18,2) NULL,          -- Project.Revenue
+    RawJson             NVARCHAR(MAX) NULL,
+    FetchedAt           DATETIME2(0)  NOT NULL CONSTRAINT DF_D365Stg_Fetched DEFAULT (SYSUTCDATETIME()),
+    CreatedAt           DATETIME2(0)  NOT NULL CONSTRAINT DF_D365Stg_Created DEFAULT (SYSUTCDATETIME()),
+    UpdatedAt           DATETIME2(0)  NULL,
+    CONSTRAINT UQ_D365ProjectStaging_JobNo UNIQUE (JobNo)
 );
 GO
 

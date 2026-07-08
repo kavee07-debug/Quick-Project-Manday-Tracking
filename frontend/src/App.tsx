@@ -10,6 +10,8 @@ import ResourceMandaySummaryPage from './pages/ResourceMandaySummaryPage';
 import ResourcePage from './pages/ResourcePage';
 import CustomersPage from './pages/CustomersPage';
 import ProgressUpdatePage from './pages/ProgressUpdatePage';
+import D365SetupPage from './pages/D365SetupPage';
+import D365JobPage from './pages/D365JobPage';
 import UsersPage from './pages/UsersPage';
 import ConfigPage from './pages/ConfigPage';
 
@@ -36,6 +38,8 @@ export default function App() {
         <Route path="/resources" element={<ResourcePage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/progress-update" element={<ProgressUpdatePage />} />
+        <Route path="/d365/setup" element={<D365SetupPage />} />
+        <Route path="/d365/jobs" element={<D365JobPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/config" element={<ConfigPage />} />
         <Route path="/" element={<Navigate to="/projects" replace />} />

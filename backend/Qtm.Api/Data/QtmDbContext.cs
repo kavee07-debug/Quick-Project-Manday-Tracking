@@ -28,6 +28,9 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<TaskMandaySummary> TaskMandaySummaries => Set<TaskMandaySummary>();
+    public DbSet<D365BcSetting> D365BcSettings => Set<D365BcSetting>();
+    public DbSet<D365ProjectStaging> D365ProjectStagings => Set<D365ProjectStaging>();
+    public DbSet<D365SyncLog> D365SyncLogs => Set<D365SyncLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -127,6 +130,46 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             foreach (var prop in new[] { nameof(TaskMandaySummary.TotalBudget), nameof(TaskMandaySummary.TotalActual),
                 nameof(TaskMandaySummary.TotalAdjust), nameof(TaskMandaySummary.Remaining) })
                 e.Property(prop).HasColumnType("decimal(9,2)");
+        });
+
+        b.Entity<D365BcSetting>(e =>
+        {
+            e.ToTable("D365BcSetting");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.TenantId).HasMaxLength(100);
+            e.Property(x => x.EnvironmentId).HasMaxLength(100);
+            e.Property(x => x.CompanyId).HasMaxLength(100);
+            e.Property(x => x.ClientId).HasMaxLength(200);
+            e.Property(x => x.ClientSecret).HasMaxLength(400);
+            e.Property(x => x.ApiPublisher).HasMaxLength(100);
+            e.Property(x => x.ApiGroup).HasMaxLength(100);
+            e.Property(x => x.ApiVersion).HasMaxLength(20);
+            e.Property(x => x.ProjectManagerCodes).HasMaxLength(200);
+        });
+
+        b.Entity<D365ProjectStaging>(e =>
+        {
+            e.ToTable("D365ProjectStaging");
+            e.HasKey(x => x.StagingId);
+            e.Property(x => x.JobNo).HasMaxLength(50);
+            e.Property(x => x.ProjectName).HasMaxLength(300);
+            e.Property(x => x.BcJobId).HasMaxLength(100);
+            e.Property(x => x.ProjectManagerCode).HasMaxLength(50);
+            e.Property(x => x.CustomerNo).HasMaxLength(50);
+            e.Property(x => x.CustomerName).HasMaxLength(300);
+            e.Property(x => x.Type).HasMaxLength(20);
+            e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
+            e.HasIndex(x => x.JobNo).IsUnique();
+        });
+
+        b.Entity<D365SyncLog>(e =>
+        {
+            e.ToTable("D365SyncLog");
+            e.HasKey(x => x.SyncId);
+            e.Property(x => x.EntityName).HasMaxLength(100);
+            e.Property(x => x.Direction).HasMaxLength(10);
+            e.Property(x => x.Status).HasMaxLength(20);
         });
     }
 }
