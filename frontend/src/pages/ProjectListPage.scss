@@ -21,3 +21,21 @@
     gap: var(--space-2);
   }
 }
+
+// Clickable, sortable column headers
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+
+  &:hover { background: var(--color-surface-2, rgba(0, 0, 0, 0.03)); }
+
+  .sort-ind {
+    margin-left: var(--space-1);
+    font-size: 0.75em;
+    opacity: 0.35;
+  }
+
+  &.sorted .sort-ind { opacity: 1; }
+  &.num .sort-ind { margin-left: var(--space-1); }
+}

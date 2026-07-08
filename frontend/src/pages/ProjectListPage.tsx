@@ -28,6 +28,41 @@ const newProjectLabel = navigator.language.toLowerCase().startsWith('th')
   ? '+ เพิ่มโปรเจกต์'
   : '+ New Project';
 
+type SortKey =
+  | 'code' | 'name' | 'customer' | 'type' | 'status' | 'progress'
+  | 'revenue' | 'totalBudget' | 'totalAdjust' | 'totalActual' | 'remaining';
+
+// Table columns in display order. `num` right-aligns; the actions column is not sortable.
+const COLUMNS: { key: SortKey; label: string; num?: boolean; nowrap?: boolean; minWidth?: number }[] = [
+  { key: 'code', label: 'รหัส', nowrap: true },
+  { key: 'name', label: 'ชื่อ' },
+  { key: 'customer', label: 'ลูกค้า' },
+  { key: 'type', label: 'ประเภท' },
+  { key: 'status', label: 'สถานะ' },
+  { key: 'progress', label: 'Progress', minWidth: 160 },
+  { key: 'revenue', label: 'Revenue', num: true },
+  { key: 'totalBudget', label: 'Sum Budget', num: true },
+  { key: 'totalAdjust', label: 'Sum Adjust', num: true },
+  { key: 'totalActual', label: 'Sum Actual', num: true },
+  { key: 'remaining', label: 'คงเหลือ', num: true },
+];
+
+function sortValue(p: Project, key: SortKey): string | number | null {
+  switch (key) {
+    case 'code': return p.code;
+    case 'name': return p.name;
+    case 'customer': return p.customerName ?? null;
+    case 'type': return p.type ?? null;
+    case 'status': return p.status;
+    case 'progress': return p.progress ?? null;
+    case 'revenue': return p.revenue ?? null;
+    case 'totalBudget': return p.totalBudget;
+    case 'totalAdjust': return p.totalAdjust;
+    case 'totalActual': return p.totalActual;
+    case 'remaining': return p.remaining;
+  }
+}
+
 const empty: ProjectUpsert = {
   code: '',
   name: '',
@@ -50,6 +85,8 @@ export default function ProjectListPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' } | null>(null);
 
   const [editing, setEditing] = useState<Project | null>(null);
   const [form, setForm] = useState<ProjectUpsert>(empty);
@@ -83,6 +120,28 @@ export default function ProjectListPage() {
         : projects,
     [projects, query],
   );
+
+  const sorted = useMemo(() => {
+    if (!sort) return filtered;
+    const factor = sort.dir === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const va = sortValue(a, sort.key);
+      const vb = sortValue(b, sort.key);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1; // nulls last regardless of direction
+      if (vb == null) return -1;
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * factor;
+      return String(va).localeCompare(String(vb), undefined, { numeric: true }) * factor;
+    });
+  }, [filtered, sort]);
+
+  function toggleSort(key: SortKey) {
+    setSort((cur) =>
+      cur && cur.key === key
+        ? { key, dir: cur.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' },
+    );
+  }
 
   const kpi = useMemo(
     () =>
@@ -191,27 +250,28 @@ export default function ProjectListPage() {
         <table className="table">
           <thead>
             <tr>
-              <th className="nowrap">รหัส</th>
-              <th>ชื่อ</th>
-              <th>ลูกค้า</th>
-              <th>ประเภท</th>
-              <th>สถานะ</th>
-              <th style={{ minWidth: 160 }}>Progress</th>
-              <th className="num">Revenue</th>
-              <th className="num">Sum Budget</th>
-              <th className="num">Sum Adjust</th>
-              <th className="num">Sum Actual</th>
-              <th className="num">คงเหลือ</th>
+              {COLUMNS.map((c) => {
+                const active = sort?.key === c.key;
+                const cls = ['sortable', c.num ? 'num' : '', c.nowrap ? 'nowrap' : '', active ? 'sorted' : '']
+                  .filter(Boolean).join(' ');
+                return (
+                  <th key={c.key} className={cls} style={c.minWidth ? { minWidth: c.minWidth } : undefined}
+                      onClick={() => toggleSort(c.key)} aria-sort={active ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                    {c.label}
+                    <span className="sort-ind">{active ? (sort!.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+                  </th>
+                );
+              })}
               <th></th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr><td colSpan={12} className="muted">กำลังโหลด…</td></tr>
-            ) : filtered.length === 0 ? (
+            ) : sorted.length === 0 ? (
               <tr><td colSpan={12} className="muted">{query ? 'ไม่พบโปรเจกต์ที่ค้นหา' : 'ยังไม่มีโปรเจกต์'}</td></tr>
             ) : (
-              filtered.map((p) => (
+              sorted.map((p) => (
                 <tr key={p.projectId}>
                   <td className="nowrap">
                     <a onClick={() => navigate(`/projects/${p.projectId}`)} style={{ cursor: 'pointer' }}>
