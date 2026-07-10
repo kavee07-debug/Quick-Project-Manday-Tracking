@@ -79,7 +79,10 @@ public class D365Controller(QtmDbContext db, D365BcClient client, D365JobService
     [HttpGet("staging")]
     public async Task<ActionResult<IEnumerable<D365StagingDto>>> ListStaging(CancellationToken ct)
     {
-        var rows = await db.D365ProjectStagings.OrderBy(x => x.JobNo).ToListAsync(ct);
+        var rows = await db.D365ProjectStagings
+            .Include(x => x.Tasks)
+            .OrderBy(x => x.JobNo)
+            .ToListAsync(ct);
         // Map JobNo -> existing Project (case-insensitive) to flag duplicates.
         var byCode = await db.Projects
             .Select(p => new { p.ProjectId, p.Code })
@@ -91,7 +94,9 @@ public class D365Controller(QtmDbContext db, D365BcClient client, D365JobService
             lookup.TryGetValue(r.JobNo.ToLowerInvariant(), out var existingId);
             var exists = existingId != 0;
             return new D365StagingDto(r.StagingId, r.JobNo, r.ProjectName, r.ProjectManagerCode,
-                r.CustomerNo, r.CustomerName, r.Type, r.Revenue, r.FetchedAt, exists, exists ? existingId : null);
+                r.CustomerNo, r.CustomerName, r.Type, r.Revenue, r.FetchedAt, exists, exists ? existingId : null,
+                r.Tasks.OrderBy(t => t.SortOrder)
+                    .Select(t => new D365TaskStagingDto(t.TaskStagingId, t.TaskNo, t.TaskDescription, t.ItemCategoryCode, t.Revenue)).ToList());
         }));
     }
 
@@ -99,6 +104,14 @@ public class D365Controller(QtmDbContext db, D365BcClient client, D365JobService
     public async Task<ActionResult<D365FetchResult>> Fetch(CancellationToken ct)
     {
         try { return Ok(await jobs.FetchAsync(ct)); }
+        catch (D365BcException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    // Pull a single job by number (ignores the "no gt maxCode" filter; PM filter still applies).
+    [HttpPost("staging/fetch-by-job")]
+    public async Task<ActionResult<D365FetchResult>> FetchByJob(FetchByJobRequest req, CancellationToken ct)
+    {
+        try { return Ok(await jobs.FetchByJobNoAsync(req.JobNo, ct)); }
         catch (D365BcException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
@@ -130,8 +143,12 @@ public class D365Controller(QtmDbContext db, D365BcClient client, D365JobService
         var existingId = exists
             ? await db.Projects.Where(p => p.Code == row.JobNo).Select(p => (int?)p.ProjectId).FirstOrDefaultAsync(ct)
             : null;
+        var tasks = await db.D365TaskStagings.Where(t => t.StagingId == row.StagingId)
+            .OrderBy(t => t.SortOrder)
+            .Select(t => new D365TaskStagingDto(t.TaskStagingId, t.TaskNo, t.TaskDescription, t.ItemCategoryCode, t.Revenue))
+            .ToListAsync(ct);
         return Ok(new D365StagingDto(row.StagingId, row.JobNo, row.ProjectName, row.ProjectManagerCode,
-            row.CustomerNo, row.CustomerName, row.Type, row.Revenue, row.FetchedAt, exists, existingId));
+            row.CustomerNo, row.CustomerName, row.Type, row.Revenue, row.FetchedAt, exists, existingId, tasks));
     }
 
     [HttpDelete("staging/{id:int}")]
@@ -146,7 +163,7 @@ public class D365Controller(QtmDbContext db, D365BcClient client, D365JobService
 
     // Bulk delete the selected staging rows.
     [HttpPost("staging/delete")]
-    public async Task<ActionResult<object>> DeleteSelected(DeleteStagingRequest req, CancellationToken ct)
+    public async Task<ActionResult<object>> DeleteSelected(StagingIdsRequest req, CancellationToken ct)
     {
         var ids = req.Ids ?? [];
         if (ids.Length == 0) return Ok(new { deleted = 0 });
@@ -167,8 +184,10 @@ public class D365Controller(QtmDbContext db, D365BcClient client, D365JobService
         // Auto-create the customer when its code is new (mirrors the Excel import behaviour).
         var customer = await ResolveCustomerAsync(row.CustomerNo, row.CustomerName, null, ct);
         var p = NewProject(row, customer);
+        var stagedTasks = await db.D365TaskStagings.Where(t => t.StagingId == row.StagingId).ToListAsync(ct);
+        AddStagedTasks(p, stagedTasks);
         db.Projects.Add(p);
-        db.D365ProjectStagings.Remove(row);   // promoted -> drop from staging
+        db.D365ProjectStagings.Remove(row);   // promoted -> drop from staging (tasks cascade)
         await db.SaveChangesAsync(ct);
 
         return CreatedAtAction("Get", "Projects", new { id = p.ProjectId },
@@ -177,15 +196,105 @@ public class D365Controller(QtmDbContext db, D365BcClient client, D365JobService
                 p.Type, p.Status, p.Progress, p.Revenue, p.StartDate, p.EndDate, 0, 0, 0, 0));
     }
 
+    // Update an EXISTING project from its staged row: refresh Name/Customer/Type/Revenue, create-or-update
+    // its tasks (revenue-bearing only), auto-create the customer if new, then drop the staging row.
+    [HttpPost("staging/{id:int}/update-project")]
+    public async Task<ActionResult<object>> UpdateProject(int id, CancellationToken ct)
+    {
+        var row = await db.D365ProjectStagings.FindAsync([id], ct);
+        if (row is null) return NotFound();
+
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Code == row.JobNo, ct);
+        if (project is null)
+            return NotFound(new { message = $"ไม่พบ Project code '{row.JobNo}' — ใช้ปุ่ม “สร้างเป็น Project” แทน" });
+
+        // Auto-create the customer when its code is new (same rule as create).
+        var customer = await ResolveCustomerAsync(row.CustomerNo, row.CustomerName, null, ct);
+        if (customer is not null) project.Customer = customer;
+        if (!string.IsNullOrWhiteSpace(row.ProjectName)) project.Name = row.ProjectName!.Trim();
+        project.Type = NormalizeType(row.Type) ?? project.Type;
+        if (row.Revenue is not null) project.Revenue = row.Revenue;
+        project.UpdatedAt = DateTime.UtcNow;
+
+        // Create-or-update tasks by TaskNo (Name). Revenue-bearing rows only; existing mandays untouched.
+        var staged = await db.D365TaskStagings
+            .Where(t => t.StagingId == row.StagingId && t.Revenue > 0m)
+            .OrderBy(t => t.SortOrder)
+            .ToListAsync(ct);
+        var byName = (await db.Tasks.Where(t => t.ProjectId == project.ProjectId).ToListAsync(ct))
+            .ToDictionary(t => t.Name, t => t, StringComparer.OrdinalIgnoreCase);
+        var createdTasks = 0;
+        var updatedTasks = 0;
+        foreach (var st in staged)
+        {
+            if (byName.TryGetValue(st.TaskNo, out var t))
+            {
+                t.Description = st.TaskDescription;
+                t.ItemCategoryCode = st.ItemCategoryCode;
+                t.Revenue = st.Revenue;
+                t.SortOrder = st.SortOrder;
+                t.UpdatedAt = DateTime.UtcNow;
+                updatedTasks++;
+            }
+            else
+            {
+                var nt = new TaskItem
+                {
+                    ProjectId = project.ProjectId,
+                    Name = st.TaskNo,
+                    Description = st.TaskDescription,
+                    ItemCategoryCode = st.ItemCategoryCode,
+                    Revenue = st.Revenue,
+                    Status = "Open",
+                    SortOrder = st.SortOrder,
+                    CreatedAt = DateTime.UtcNow,
+                };
+                db.Tasks.Add(nt);
+                byName[st.TaskNo] = nt;   // dedupe within this batch
+                createdTasks++;
+            }
+        }
+
+        db.D365ProjectStagings.Remove(row);   // applied -> drop from staging (task staging cascades)
+        await db.SaveChangesAsync(ct);
+
+        return Ok(new { projectId = project.ProjectId, tasksCreated = createdTasks, tasksUpdated = updatedTasks });
+    }
+
+    // Promote all non-duplicate staged rows.
     [HttpPost("staging/create-eligible")]
     public async Task<ActionResult<CreateProjectsResult>> CreateEligible(CancellationToken ct)
     {
         var rows = await db.D365ProjectStagings.OrderBy(x => x.JobNo).ToListAsync(ct);
+        return Ok(await CreateProjectsFromAsync(rows, ct));
+    }
+
+    // Promote only the selected staged rows (duplicates among them are skipped).
+    [HttpPost("staging/create-selected")]
+    public async Task<ActionResult<CreateProjectsResult>> CreateSelected(StagingIdsRequest req, CancellationToken ct)
+    {
+        var ids = req.Ids ?? [];
+        if (ids.Length == 0) return Ok(new CreateProjectsResult(0, 0, []));
+        var rows = await db.D365ProjectStagings
+            .Where(x => ids.Contains(x.StagingId))
+            .OrderBy(x => x.JobNo)
+            .ToListAsync(ct);
+        return Ok(await CreateProjectsFromAsync(rows, ct));
+    }
+
+    // Shared promote: skips rows whose JobNo is already a Project.Code, auto-creates customers, carries
+    // revenue-bearing tasks, and deletes each promoted staging row (its task rows cascade).
+    private async Task<CreateProjectsResult> CreateProjectsFromAsync(List<D365ProjectStaging> rows, CancellationToken ct)
+    {
         var existing = (await db.Projects.Select(p => p.Code).ToListAsync(ct))
             .Select(c => c.ToLowerInvariant()).ToHashSet();
         // Cache customers by code (case-insensitive) so repeated codes reuse the same new customer.
         var customerCache = (await db.Customers.ToListAsync(ct))
             .ToDictionary(c => c.Code, c => c, StringComparer.OrdinalIgnoreCase);
+        // Staged tasks grouped by parent, so each promoted project carries its tasks.
+        var tasksByStaging = (await db.D365TaskStagings.ToListAsync(ct))
+            .GroupBy(t => t.StagingId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         var created = 0;
         var skipped = 0;
@@ -195,7 +304,9 @@ public class D365Controller(QtmDbContext db, D365BcClient client, D365JobService
         {
             if (existing.Contains(row.JobNo.ToLowerInvariant())) { skipped++; continue; }
             var customer = await ResolveCustomerAsync(row.CustomerNo, row.CustomerName, customerCache, ct);
-            db.Projects.Add(NewProject(row, customer));
+            var p = NewProject(row, customer);
+            AddStagedTasks(p, tasksByStaging.GetValueOrDefault(row.StagingId) ?? []);
+            db.Projects.Add(p);
             db.D365ProjectStagings.Remove(row);
             existing.Add(row.JobNo.ToLowerInvariant());
             created++;
@@ -205,12 +316,39 @@ public class D365Controller(QtmDbContext db, D365BcClient client, D365JobService
         catch (DbUpdateException ex)
         {
             errors.Add(ex.InnerException?.Message ?? ex.Message);
-            return Ok(new CreateProjectsResult(0, skipped, errors));
+            return new CreateProjectsResult(0, skipped, errors);
         }
-        return Ok(new CreateProjectsResult(created, skipped, errors));
+        return new CreateProjectsResult(created, skipped, errors);
+    }
+
+    // ---------- Master Item (BC pull) ----------
+    // Sync the item master from BC. Master CRUD/list lives in MasterItemsController; the pull is
+    // here so all BC calls stay Admin-only alongside the settings.
+    [HttpPost("items/fetch")]
+    public async Task<ActionResult<MasterItemFetchResult>> FetchItems(CancellationToken ct)
+    {
+        try { return Ok(await jobs.FetchItemsAsync(ct)); }
+        catch (D365BcException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     // ---------- helpers ----------
+    // Adds the staged job tasks to a (not-yet-saved) project: TaskNo -> Name, description -> Description.
+    // Only tasks that carry revenue (> 0) are promoted — LICENSE/zero-revenue tasks are skipped.
+    private static void AddStagedTasks(Project p, IEnumerable<D365TaskStaging> tasks)
+    {
+        foreach (var t in tasks.Where(t => t.Revenue > 0m).OrderBy(t => t.SortOrder))
+            p.Tasks.Add(new TaskItem
+            {
+                Name = t.TaskNo,
+                Description = t.TaskDescription,
+                ItemCategoryCode = t.ItemCategoryCode,
+                Revenue = t.Revenue,
+                Status = "Open",
+                SortOrder = t.SortOrder,
+                CreatedAt = DateTime.UtcNow,
+            });
+    }
+
     private static Project NewProject(D365ProjectStaging row, Customer? customer) => new()
     {
         Code = row.JobNo,

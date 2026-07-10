@@ -25,11 +25,14 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
     public DbSet<MandayEntry> MandayEntries => Set<MandayEntry>();
     public DbSet<ResourceItem> Resources => Set<ResourceItem>();
+    public DbSet<MasterItem> MasterItems => Set<MasterItem>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<TaskMandaySummary> TaskMandaySummaries => Set<TaskMandaySummary>();
     public DbSet<D365BcSetting> D365BcSettings => Set<D365BcSetting>();
     public DbSet<D365ProjectStaging> D365ProjectStagings => Set<D365ProjectStaging>();
+    public DbSet<D365TaskStaging> D365TaskStagings => Set<D365TaskStaging>();
+    public DbSet<D365TimesheetStaging> D365TimesheetStagings => Set<D365TimesheetStaging>();
     public DbSet<D365SyncLog> D365SyncLogs => Set<D365SyncLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -64,6 +67,8 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.ToTable("Task");
             e.HasKey(x => x.TaskId);
             e.Property(x => x.Name).HasMaxLength(300);
+            e.Property(x => x.ItemCategoryCode).HasMaxLength(50);
+            e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
             e.Property(x => x.Status).HasMaxLength(30);
             e.HasOne(x => x.Project)
                 .WithMany(p => p.Tasks)
@@ -76,8 +81,10 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.ToTable("MandayEntry");
             e.HasKey(x => x.MandayEntryId);
             e.Property(x => x.EntryType).HasMaxLength(10);
-            e.Property(x => x.Manday).HasColumnType("decimal(9,2)");
+            e.Property(x => x.Manday).HasColumnType("decimal(11,4)");
             e.Property(x => x.Note).HasMaxLength(500);
+            e.Property(x => x.SourceSystemId).HasMaxLength(100);
+            e.HasIndex(x => x.SourceSystemId);
             e.HasOne(x => x.Task)
                 .WithMany(t => t.MandayEntries)
                 .HasForeignKey(x => x.TaskId);
@@ -94,6 +101,16 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.Position).HasMaxLength(20);
             e.HasIndex(x => x.Code).IsUnique();
+        });
+
+        b.Entity<MasterItem>(e =>
+        {
+            e.ToTable("MasterItem");
+            e.HasKey(x => x.ItemId);
+            e.Property(x => x.Number).HasMaxLength(50);
+            e.Property(x => x.DisplayName).HasMaxLength(300);
+            e.Property(x => x.ItemCategoryCode).HasMaxLength(50);
+            e.HasIndex(x => x.Number).IsUnique();
         });
 
         b.Entity<User>(e =>
@@ -161,6 +178,40 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.Property(x => x.Type).HasMaxLength(20);
             e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
             e.HasIndex(x => x.JobNo).IsUnique();
+            e.HasMany(x => x.Tasks)
+                .WithOne(t => t.Staging)
+                .HasForeignKey(t => t.StagingId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<D365TaskStaging>(e =>
+        {
+            e.ToTable("D365TaskStaging");
+            e.HasKey(x => x.TaskStagingId);
+            e.Property(x => x.JobNo).HasMaxLength(50);
+            e.Property(x => x.TaskNo).HasMaxLength(50);
+            e.Property(x => x.TaskDescription).HasMaxLength(300);
+            e.Property(x => x.ItemCategoryCode).HasMaxLength(50);
+            e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
+            e.HasIndex(x => new { x.StagingId, x.TaskNo }).IsUnique();
+        });
+
+        b.Entity<D365TimesheetStaging>(e =>
+        {
+            e.ToTable("D365TimesheetStaging");
+            e.HasKey(x => x.TimesheetStagingId);
+            e.Property(x => x.SystemId).HasMaxLength(100);
+            e.Property(x => x.JobNo).HasMaxLength(50);
+            e.Property(x => x.JobTaskNo).HasMaxLength(50);
+            e.Property(x => x.ResourceNo).HasMaxLength(50);
+            e.Property(x => x.QuantityHour).HasColumnType("decimal(18,2)");
+            e.Property(x => x.QuantityMD).HasColumnType("decimal(18,4)");
+            e.Property(x => x.Comment).HasMaxLength(500);
+            e.Property(x => x.ProjectManager).HasMaxLength(50);
+            e.Property(x => x.TimesheetStatus).HasMaxLength(30);
+            e.Property(x => x.NewJobNo).HasMaxLength(50);
+            e.Property(x => x.NewTaskNo).HasMaxLength(50);
+            e.HasIndex(x => x.SystemId).IsUnique();
         });
 
         b.Entity<D365SyncLog>(e =>

@@ -13,11 +13,16 @@ function fmt(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 }
 
+function money(n: number) {
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
 interface FormState extends MandayUpsert {
   taskId: number;
 }
 
-export function EstimateActualTab({ projectId, projectCode }: { projectId: number; projectCode: string }) {
+export function EstimateActualTab({ projectId, projectCode, projectRevenue }:
+  { projectId: number; projectCode: string; projectRevenue?: number | null }) {
   const { isManager, hasRole } = useAuth();
   const canRecordActual = isManager || hasRole('Member');
 
@@ -157,6 +162,10 @@ export function EstimateActualTab({ projectId, projectCode }: { projectId: numbe
       />
 
       <div className="kpi-grid ea__kpi">
+        <div className="statcard statcard--teal">
+          <div className="statcard__label">Revenue (Project)</div>
+          <div className="statcard__value">{projectRevenue != null ? money(projectRevenue) : '—'}</div>
+        </div>
         <div className="statcard statcard--blue">
           <div className="statcard__label">Sum Budget</div>
           <div className="statcard__value">{fmt(projectTotals.budget)}</div>
@@ -186,7 +195,12 @@ export function EstimateActualTab({ projectId, projectCode }: { projectId: numbe
           <div className="ea__task card" key={task.taskId}>
             <div className="ea__task-head">
               <div>
-                <h3 className="ea__task-name">{task.name}</h3>
+                <h3 className="ea__task-name">
+                  {task.name}
+                  {task.revenue != null && (
+                    <span className="ea__task-revenue">Revenue {money(task.revenue)}</span>
+                  )}
+                </h3>
                 {task.description && <p className="muted ea__task-desc">{task.description}</p>}
                 {s && (
                   <span className="muted ea__task-sub">

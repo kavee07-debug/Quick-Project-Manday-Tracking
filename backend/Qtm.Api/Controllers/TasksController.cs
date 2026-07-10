@@ -14,7 +14,7 @@ namespace Qtm.Api.Controllers;
 public class TasksController(QtmDbContext db) : ControllerBase
 {
     private static TaskDto ToDto(TaskItem t) =>
-        new(t.TaskId, t.ProjectId, t.Name, t.Description, t.Status, t.SortOrder);
+        new(t.TaskId, t.ProjectId, t.Name, t.Description, t.ItemCategoryCode, t.Revenue, t.Status, t.SortOrder);
 
     [HttpGet("projects/{projectId:int}/tasks")]
     public async Task<ActionResult<IEnumerable<TaskDto>>> List(int projectId)

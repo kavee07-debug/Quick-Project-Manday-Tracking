@@ -39,6 +39,7 @@ builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 // D365 Business Central integration (Admin-only API screens).
 builder.Services.AddHttpClient<D365BcClient>();
 builder.Services.AddScoped<D365JobService>();
+builder.Services.AddScoped<D365TimesheetService>();
 
 builder.Services.AddCors(o => o.AddPolicy(CorsPolicy, p =>
     p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));

@@ -17,6 +17,15 @@
     margin-bottom: var(--space-2);
   }
   &__task-name { margin: 0; font-size: var(--font-size-base); }
+  &__task-revenue {
+    margin-left: var(--space-2);
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    background: var(--color-primary-soft, rgba(0, 128, 128, 0.12));
+    color: var(--color-primary, teal);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+  }
   &__task-desc { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); }
   &__task-sub { font-size: var(--font-size-sm); }
 }

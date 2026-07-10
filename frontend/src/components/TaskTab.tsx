@@ -91,19 +91,23 @@ export function TaskTab({ projectId }: { projectId: number }) {
               <th>ลำดับ</th>
               <th>ชื่อ Task</th>
               <th>รายละเอียด</th>
+              <th>Item Category</th>
+              <th className="num">Revenue</th>
               <th>สถานะ</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {tasks.length === 0 ? (
-              <tr><td colSpan={5} className="muted">ยังไม่มี task</td></tr>
+              <tr><td colSpan={7} className="muted">ยังไม่มี task</td></tr>
             ) : (
               tasks.map((t) => (
                 <tr key={t.taskId}>
                   <td>{t.sortOrder}</td>
                   <td>{t.name}</td>
                   <td className="muted">{t.description || '—'}</td>
+                  <td>{t.itemCategoryCode ?? '—'}</td>
+                  <td className="num">{t.revenue != null ? t.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}</td>
                   <td>{t.status}</td>
                   <td className="num">
                     {isManager && (

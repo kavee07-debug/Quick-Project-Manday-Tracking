@@ -12,6 +12,8 @@ public class MandayEntry
     public DateOnly? StartDate { get; set; }               // planned/actual start
     public DateOnly? EndDate { get; set; }                 // defaults to StartDate, editable
     public string? Note { get; set; }
+    public string? SourceSystemId { get; set; }            // D365 timesheet systemId when applied from Timesheet screen
+    public DateTime? AppliedAt { get; set; }               // when applied from a timesheet
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 

@@ -71,6 +71,11 @@ button {
   }
 
   &--sm { padding: var(--space-1) var(--space-3); font-size: var(--font-size-sm); }
+  &--icon {
+    padding: var(--space-1) var(--space-2);
+    line-height: 1;
+    font-size: var(--font-size-md);
+  }
 }
 
 // ---- KPI stat cards (dashboard style) ----
@@ -115,6 +120,12 @@ button {
   box-shadow: var(--shadow-card);
 }
 
+// A card wrapping a wide table scrolls horizontally inside its own border,
+// so the rounded border stays full-width and the actions column never spills out.
+.card:has(.table) {
+  overflow-x: auto;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -133,6 +144,7 @@ button {
   }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   td.nowrap, th.nowrap { white-space: nowrap; }
+  td.center, th.center { text-align: center; }
 }
 
 .badge {

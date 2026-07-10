@@ -63,6 +63,8 @@ function sortValue(p: Project, key: SortKey): string | number | null {
   }
 }
 
+const PAGE_SIZES = [20, 30, 50, 100] as const;
+
 const empty: ProjectUpsert = {
   code: '',
   name: '',
@@ -79,14 +81,17 @@ const empty: ProjectUpsert = {
 export default function ProjectListPage() {
   const { isManager } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const query = (searchParams.get('q') ?? '').trim().toLowerCase();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawQuery = searchParams.get('q') ?? '';
+  const query = rawQuery.trim().toLowerCase();
   const [projects, setProjects] = useState<Project[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' } | null>(null);
+  const [pageSize, setPageSize] = useState<number>(20);
+  const [page, setPage] = useState(1);
 
   const [editing, setEditing] = useState<Project | null>(null);
   const [form, setForm] = useState<ProjectUpsert>(empty);
@@ -142,6 +147,15 @@ export default function ProjectListPage() {
         : { key, dir: 'asc' },
     );
   }
+
+  // Reset to the first page whenever the result set or page size changes.
+  useEffect(() => {
+    setPage(1);
+  }, [query, sort, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paged = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const kpi = useMemo(
     () =>
@@ -235,6 +249,16 @@ export default function ProjectListPage() {
       </div>
 
       <div className="projects__toolbar">
+        <input
+          className="input projects__search"
+          type="search"
+          placeholder="ค้นหาโปรเจกต์ (รหัส/ชื่อ)…"
+          value={rawQuery}
+          onChange={(e) => {
+            const v = e.target.value;
+            setSearchParams(v ? { q: v } : {}, { replace: true });
+          }}
+        />
         <ImportExportBar
           exportPath="/export/projects"
           exportFilename="projects.xlsx"
@@ -271,12 +295,15 @@ export default function ProjectListPage() {
             ) : sorted.length === 0 ? (
               <tr><td colSpan={12} className="muted">{query ? 'ไม่พบโปรเจกต์ที่ค้นหา' : 'ยังไม่มีโปรเจกต์'}</td></tr>
             ) : (
-              sorted.map((p) => (
+              paged.map((p) => (
                 <tr key={p.projectId}>
                   <td className="nowrap">
                     <a onClick={() => navigate(`/projects/${p.projectId}`)} style={{ cursor: 'pointer' }}>
                       {p.code}
                     </a>
+                    {p.code.toUpperCase().startsWith('SOJ') && p.totalBudget === 0 && p.totalAdjust === 0 && (
+                      <span className="projects__new" title="ยังไม่กำหนด Budget/Adjust — คลิกที่รหัสเพื่อไปกำหนด">🆕</span>
+                    )}
                   </td>
                   <td>{p.name}</td>
                   <td>{p.customerName ? `${p.customerCode} · ${p.customerName}` : '—'}</td>
@@ -302,6 +329,27 @@ export default function ProjectListPage() {
           </tbody>
         </table>
       </div>
+
+      {!loading && sorted.length > 0 && (
+        <div className="projects__pager">
+          <label className="projects__pager-size">
+            แสดง
+            <select className="input" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+              {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            ต่อหน้า · ทั้งหมด {sorted.length} รายการ
+          </label>
+          <div className="projects__pager-nav">
+            <button className="btn btn--sm" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>
+              ‹ ก่อนหน้า
+            </button>
+            <span className="muted">หน้า {currentPage} / {totalPages}</span>
+            <button className="btn btn--sm" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)}>
+              ถัดไป ›
+            </button>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <Modal title={editing ? 'แก้ไขโปรเจกต์' : 'เพิ่มโปรเจกต์'} onClose={() => setShowForm(false)}>

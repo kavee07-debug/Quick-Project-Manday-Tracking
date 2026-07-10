@@ -11,6 +11,7 @@ publish-api/
 
 # ---- Deploy artifacts ----
 QtmApi.zip
+QtmApi-deploy.zip
 QtmWeb.zip
 QtmApp.zip
 publish-web/

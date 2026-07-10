@@ -13,12 +13,48 @@
   }
 
   &__toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
     margin-bottom: var(--space-4);
+  }
+
+  &__search {
+    max-width: 420px;
+  }
+
+  &__pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-top: var(--space-3);
+
+    .input { width: auto; margin: 0 var(--space-2); }
+  }
+  &__pager-size {
+    display: inline-flex;
+    align-items: center;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+  }
+  &__pager-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
   }
 
   &__actions {
     display: inline-flex;
     gap: var(--space-2);
+  }
+
+  // "New" indicator — project has no Budget/Adjust mandays defined yet.
+  &__new {
+    margin-left: var(--space-2);
+    cursor: help;
   }
 }
 

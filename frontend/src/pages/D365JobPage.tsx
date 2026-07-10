@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
 import { PROJECT_TYPES, type CreateProjectsResult, type D365FetchResult, type D365StagingRow } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
@@ -18,7 +18,18 @@ export default function D365JobPage() {
   const [fetchResult, setFetchResult] = useState<D365FetchResult | null>(null);
 
   const [query, setQuery] = useState('');
+  const [jobNoInput, setJobNoInput] = useState('');
+  const [revenueFilter, setRevenueFilter] = useState<'all' | 'zero' | 'nonzero'>('all');
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  function toggleExpand(id: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   const [editing, setEditing] = useState<D365StagingRow | null>(null);
   const [form, setForm] = useState({ jobNo: '', projectName: '', customerNo: '', customerName: '', type: '', revenue: '' });
@@ -47,15 +58,18 @@ export default function D365JobPage() {
     else setLoading(false);
   }, [isAdmin]);
 
-  // Client-side filter across the visible fields.
+  // Client-side filter across the visible fields (+ optional Revenue = 0 / > 0 filter).
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) =>
-      [r.jobNo, r.projectName, r.customerNo, r.customerName, r.projectManagerCode]
-        .some((v) => (v ?? '').toLowerCase().includes(q)),
-    );
-  }, [rows, query]);
+    return rows.filter((r) => {
+      const rev = r.revenue ?? 0;
+      if (revenueFilter === 'zero' && rev !== 0) return false;
+      if (revenueFilter === 'nonzero' && rev === 0) return false;
+      if (!q) return true;
+      return [r.jobNo, r.projectName, r.customerNo, r.customerName, r.projectManagerCode]
+        .some((v) => (v ?? '').toLowerCase().includes(q));
+    });
+  }, [rows, query, revenueFilter]);
 
   const allVisibleSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.stagingId));
   const someVisibleSelected = filtered.some((r) => selected.has(r.stagingId));
@@ -94,6 +108,26 @@ export default function D365JobPage() {
     }
   }
 
+  async function fetchByJob() {
+    const jobNo = jobNoInput.trim();
+    if (!jobNo) return;
+    setBusy(true);
+    setFetching(true);
+    setError(null);
+    setFetchResult(null);
+    try {
+      const res = await api.post<D365FetchResult>('/d365/staging/fetch-by-job', { jobNo });
+      setFetchResult(res);
+      await load();
+      if (res.errors.length) setError(res.errors.join(' · '));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'ดึง Job ไม่สำเร็จ');
+    } finally {
+      setFetching(false);
+      setBusy(false);
+    }
+  }
+
   async function createOne(row: D365StagingRow) {
     if (!confirm(`สร้าง Project "${row.jobNo}" ?`)) return;
     try {
@@ -101,6 +135,16 @@ export default function D365JobPage() {
       await load();
     } catch (err) {
       alert(err instanceof ApiError ? err.message : 'สร้างไม่สำเร็จ');
+    }
+  }
+
+  async function updateOne(row: D365StagingRow) {
+    if (!confirm(`อัพเดทข้อมูล (พร้อม Task) ไปยัง Project "${row.jobNo}" ที่มีอยู่แล้ว ?`)) return;
+    try {
+      await api.post(`/d365/staging/${row.stagingId}/update-project`);
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : 'อัพเดทไม่สำเร็จ');
     }
   }
 
@@ -113,6 +157,23 @@ export default function D365JobPage() {
       const res = await api.post<CreateProjectsResult>('/d365/staging/create-eligible');
       await load();
       if (res.errors.length) alert(res.errors.join('\n'));
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : 'สร้างไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!confirm(`สร้าง Project จากรายการที่เลือก (${ids.length} รายการ) ?`)) return;
+    setBusy(true);
+    try {
+      const res = await api.post<CreateProjectsResult>('/d365/staging/create-selected', { ids });
+      await load();
+      if (res.errors.length) alert(res.errors.join('\n'));
+      else if (res.skipped > 0) alert(`สร้าง ${res.created} รายการ · ข้าม ${res.skipped} (ซ้ำ)`);
     } catch (err) {
       alert(err instanceof ApiError ? err.message : 'สร้างไม่สำเร็จ');
     } finally {
@@ -184,8 +245,24 @@ export default function D365JobPage() {
           <button className="btn btn--primary" onClick={fetchFromBc} disabled={busy}>
             ⬇ ดึงข้อมูลจาก D365BC
           </button>
+          <span className="d365job__byjob">
+            <input
+              className="input"
+              placeholder="เลข Job (เช่น SOJ2606-0105)"
+              value={jobNoInput}
+              onChange={(e) => setJobNoInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') fetchByJob(); }}
+              disabled={busy}
+            />
+            <button className="btn" onClick={fetchByJob} disabled={busy || !jobNoInput.trim()}>
+              ⬇ ดึง Job นี้
+            </button>
+          </span>
           <button className="btn" onClick={createEligible} disabled={busy || eligibleCount === 0}>
             + สร้างทั้งหมดที่ยังไม่ซ้ำ ({eligibleCount})
+          </button>
+          <button className="btn btn--primary" onClick={createSelected} disabled={busy || selected.size === 0}>
+            + สร้างที่เลือก ({selected.size})
           </button>
           <button className="btn btn--danger" onClick={removeSelected} disabled={busy || selected.size === 0}>
             🗑 ลบที่เลือก ({selected.size})
@@ -197,6 +274,11 @@ export default function D365JobPage() {
         ระบบจะดึง Project ที่มีเลข <b>มากกว่า</b>:{' '}
         <span className="d365job__maxcode">{maxCode || '—'}</span>
         <span className="muted"> (เลข Project SOJ ล่าสุดในระบบ)</span>
+        <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
+          Revenue คำนวณอัตโนมัติจาก jobPlanningLines (เฉพาะ Billable + หมวด IMPLEMENT/CUSTOMIZE/MA) —
+          ควรกด “ดึงจาก D365BC” ที่หน้า <b>Master Item</b> ก่อน ไม่งั้น Revenue จะเป็น 0.
+          {' '}⚠️ = มี Task หมวด MA · 🪪 = ทุก Task เป็นหมวด LICENSE
+        </div>
       </div>
 
       <div className="d365job__toolbar">
@@ -207,6 +289,18 @@ export default function D365JobPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <label className="d365job__toggle">
+          Revenue:
+          <select
+            className="input"
+            value={revenueFilter}
+            onChange={(e) => setRevenueFilter(e.target.value as 'all' | 'zero' | 'nonzero')}
+          >
+            <option value="all">ทั้งหมด</option>
+            <option value="zero">= 0 (ตรวจก่อนลบ)</option>
+            <option value="nonzero">&gt; 0</option>
+          </select>
+        </label>
         <span className="muted">
           แสดง {filtered.length} / {rows.length} รายการ
           {selected.size > 0 && ` · เลือก ${selected.size}`}
@@ -260,16 +354,37 @@ export default function D365JobPage() {
             ) : filtered.length === 0 ? (
               <tr><td colSpan={9} className="muted">ไม่พบรายการที่ค้นหา</td></tr>
             ) : (
-              filtered.map((r) => (
-                <tr key={r.stagingId} className={selected.has(r.stagingId) ? 'd365job__row--selected' : ''}>
+              filtered.map((r) => {
+                const hasMa = r.tasks.some((t) => (t.itemCategoryCode ?? '').toUpperCase() === 'MA');
+                const allLicense = r.tasks.length > 0
+                  && r.tasks.every((t) => (t.itemCategoryCode ?? '').toUpperCase() === 'LICENSE');
+                return (
+                <Fragment key={r.stagingId}>
+                <tr className={selected.has(r.stagingId) ? 'd365job__row--selected' : ''}>
                   <td className="d365job__check">
                     <input type="checkbox" checked={selected.has(r.stagingId)} onChange={() => toggleOne(r.stagingId)} />
                   </td>
-                  <td className="nowrap">{r.jobNo}</td>
+                  <td className="nowrap">
+                    <button
+                      className="d365job__expand"
+                      onClick={() => toggleExpand(r.stagingId)}
+                      disabled={r.tasks.length === 0}
+                      title={r.tasks.length ? 'ดู Task' : 'ไม่มี Task'}
+                    >
+                      {expanded.has(r.stagingId) ? '▾' : '▸'} {r.tasks.length}
+                    </button>{' '}
+                    {r.jobNo}
+                    {hasMa && (
+                      <span className="d365job__ma" title="มี Task หมวด MA">⚠️</span>
+                    )}
+                    {allLicense && (
+                      <span className="d365job__lic" title="ทุก Task เป็นหมวด LICENSE">🪪</span>
+                    )}
+                  </td>
                   <td>{r.projectName ?? '—'}</td>
                   <td>{r.customerNo || r.customerName ? `${r.customerNo ?? ''}${r.customerName ? ' · ' + r.customerName : ''}` : '—'}</td>
                   <td>{r.type ?? '—'}</td>
-                  <td className="num">{r.revenue != null ? r.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}</td>
+                  <td className={`num${hasMa ? ' d365job__revenue--ma' : ''}`}>{r.revenue != null ? r.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}</td>
                   <td>{r.projectManagerCode ?? '—'}</td>
                   <td>
                     {r.alreadyExists
@@ -279,19 +394,55 @@ export default function D365JobPage() {
                   <td className="num">
                     <span className="d365job__rowactions">
                       <button className="btn btn--sm" onClick={() => openEdit(r)}>แก้ไข</button>
-                      <button
-                        className="btn btn--sm btn--primary"
-                        onClick={() => createOne(r)}
-                        disabled={r.alreadyExists}
-                        title={r.alreadyExists ? 'มี Project code นี้อยู่แล้ว' : 'สร้างเป็น Project'}
-                      >
-                        สร้างเป็น Project
-                      </button>
+                      {r.alreadyExists ? (
+                        <button
+                          className="btn btn--sm btn--primary"
+                          onClick={() => updateOne(r)}
+                          title="อัพเดทข้อมูล + Task ไปยัง Project ที่มีอยู่แล้ว"
+                        >
+                          อัพเดท Project
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn--sm btn--primary"
+                          onClick={() => createOne(r)}
+                          title="สร้างเป็น Project"
+                        >
+                          สร้างเป็น Project
+                        </button>
+                      )}
                       <button className="btn btn--sm btn--danger" onClick={() => remove(r)}>ลบ</button>
                     </span>
                   </td>
                 </tr>
-              ))
+                {expanded.has(r.stagingId) && r.tasks.length > 0 && (
+                  <tr className="d365job__subrow">
+                    <td></td>
+                    <td colSpan={8}>
+                      <div className="d365job__tasks">
+                        <div className="d365job__tasks-title">Task ({r.tasks.length})</div>
+                        <table className="d365job__subtable">
+                          <thead>
+                            <tr><th className="nowrap">Task No</th><th>Task Description</th><th className="nowrap">Item Category</th><th className="num">Revenue</th></tr>
+                          </thead>
+                          <tbody>
+                            {r.tasks.map((t) => (
+                              <tr key={t.taskStagingId}>
+                                <td className="nowrap">{t.taskNo}</td>
+                                <td>{t.taskDescription ?? '—'}</td>
+                                <td className="nowrap">{t.itemCategoryCode ?? '—'}</td>
+                                <td className="num">{t.revenue != null ? t.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -303,7 +454,7 @@ export default function D365JobPage() {
             <div className="d365job__spinner" />
             <div>
               <strong>กำลังดึงข้อมูลจาก D365BC…</strong>
-              <p className="muted">ขอ Token → ดึง Job → ดึงชื่อ Project (อาจใช้เวลาสักครู่)</p>
+              <p className="muted">ขอ Token → ดึง Job → ชื่อ Project → jobPlanningLines (Revenue) (อาจใช้เวลาสักครู่)</p>
             </div>
           </div>
         </div>

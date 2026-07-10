@@ -19,4 +19,6 @@ public class D365ProjectStaging
     public DateTime FetchedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+
+    public ICollection<D365TaskStaging> Tasks { get; set; } = new List<D365TaskStaging>();
 }

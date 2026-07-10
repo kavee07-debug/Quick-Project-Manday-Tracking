@@ -1,16 +1,13 @@
 import { useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { ChartIcon, GearIcon, GridIcon, LogoutIcon, MenuIcon, PeopleIcon, PlugIcon, SearchIcon, UserIcon } from './icons';
+import { BoxIcon, ChartIcon, ClockIcon, GearIcon, GridIcon, LogoutIcon, MenuIcon, PeopleIcon, PlugIcon, UserIcon } from './icons';
 import './AppLayout.scss';
 
 const SIDEBAR_KEY = 'qtm.sidebar';
 
 export function AppLayout() {
   const { session, logout, hasRole } = useAuth();
-  const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const q = params.get('q') ?? '';
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'collapsed');
 
   function toggleSidebar() {
@@ -19,11 +16,6 @@ export function AppLayout() {
       localStorage.setItem(SIDEBAR_KEY, next ? 'collapsed' : 'expanded');
       return next;
     });
-  }
-
-  // Header search always filters the project list (?q=...).
-  function onSearch(value: string) {
-    navigate(value ? `/projects?q=${encodeURIComponent(value)}` : '/projects', { replace: true });
   }
 
   const navItem = ({ isActive }: { isActive: boolean }) =>
@@ -49,15 +41,7 @@ export function AppLayout() {
           </span>
         </Link>
 
-        <label className="topbar__search">
-          <SearchIcon size={18} />
-          <input
-            type="search"
-            placeholder="ค้นหาโปรเจกต์ (รหัส/ชื่อ)…"
-            value={q}
-            onChange={(e) => onSearch(e.target.value)}
-          />
-        </label>
+        <div className="topbar__spacer" />
 
         <div className="topbar__actions">
           <span className="topbar__user">
@@ -99,6 +83,11 @@ export function AppLayout() {
               <PeopleIcon size={20} /> <span className="sidebar__label">Master Resource</span>
             </NavLink>
           )}
+          {hasRole('Admin', 'ProjectManager') && (
+            <NavLink to="/master-items" className={navItem} title="Master Item">
+              <BoxIcon size={20} /> <span className="sidebar__label">Master Item</span>
+            </NavLink>
+          )}
           {hasRole('Admin') && (
             <NavLink to="/users" className={navItem} title="จัดการผู้ใช้">
               <UserIcon size={20} /> <span className="sidebar__label">จัดการผู้ใช้</span>
@@ -119,6 +108,9 @@ export function AppLayout() {
               </NavLink>
               <NavLink to="/d365/jobs" className={navItem} title="API Job">
                 <PlugIcon size={20} /> <span className="sidebar__label">API Job</span>
+              </NavLink>
+              <NavLink to="/d365/timesheet" className={navItem} title="Timesheet">
+                <ClockIcon size={20} /> <span className="sidebar__label">Timesheet</span>
               </NavLink>
             </>
           )}

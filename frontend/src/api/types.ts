@@ -68,6 +68,8 @@ export interface TaskItem {
   projectId: number;
   name: string;
   description?: string | null;
+  itemCategoryCode?: string | null;
+  revenue?: number | null;
   status: string;
   sortOrder: number;
 }
@@ -106,6 +108,22 @@ export interface Resource {
 }
 
 export type ResourceUpsert = Pick<Resource, 'code' | 'name' | 'position' | 'isActive'>;
+
+// ---- Master Item (synced from D365BC) ----
+export interface MasterItem {
+  itemId: number;
+  number: string;
+  displayName: string;
+  itemCategoryCode?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface MasterItemFetchResult {
+  fetched: number;
+  inserted: number;
+  updated: number;
+  errors: string[];
+}
 
 export interface ImportResult {
   created: number;
@@ -169,6 +187,14 @@ export interface D365TestResult {
   message: string;
 }
 
+export interface D365TaskStagingRow {
+  taskStagingId: number;
+  taskNo: string;
+  taskDescription?: string | null;
+  itemCategoryCode?: string | null;
+  revenue?: number | null;
+}
+
 export interface D365StagingRow {
   stagingId: number;
   jobNo: string;
@@ -181,6 +207,7 @@ export interface D365StagingRow {
   fetchedAt: string;
   alreadyExists: boolean;
   existingProjectId?: number | null;
+  tasks: D365TaskStagingRow[];
 }
 
 export interface D365FetchResult {
@@ -193,6 +220,43 @@ export interface D365FetchResult {
 
 export interface CreateProjectsResult {
   created: number;
+  skipped: number;
+  errors: string[];
+}
+
+// ---- D365BC Timesheet staging ----
+export type TimesheetValidateStatus = 'OK' | 'NoJob' | 'NoTask';
+
+export interface D365TimesheetRow {
+  id: number;
+  systemId: string;
+  jobNo?: string | null;
+  jobTaskNo?: string | null;
+  timesheetDate?: string | null;
+  resourceNo?: string | null;
+  resourceName?: string | null;
+  quantityHour?: number | null;
+  quantityMD?: number | null;
+  comment?: string | null;
+  projectManager?: string | null;
+  timesheetStatus?: string | null;
+  newJobNo?: string | null;
+  newTaskNo?: string | null;
+  validateStatus: TimesheetValidateStatus;
+  validateNewStatus: TimesheetValidateStatus;
+  alreadyInActual: boolean;
+}
+
+export interface D365TimesheetFetchResult {
+  fetched: number;
+  inserted: number;
+  updated: number;
+  year: string;
+  errors: string[];
+}
+
+export interface D365ApplyResult {
+  applied: number;
   skipped: number;
   errors: string[];
 }

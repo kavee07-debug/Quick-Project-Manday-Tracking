@@ -45,7 +45,7 @@ export default function ProjectDetailPage() {
       {tab === 'tasks' ? (
         <TaskTab projectId={projectId} />
       ) : (
-        <EstimateActualTab projectId={projectId} projectCode={project.code} />
+        <EstimateActualTab projectId={projectId} projectCode={project.code} projectRevenue={project.revenue} />
       )}
     </div>
   );

@@ -17,11 +17,14 @@ IF OBJECT_ID(N'dbo.Task', N'U')         IS NOT NULL DROP TABLE dbo.Task;
 IF OBJECT_ID(N'dbo.Project', N'U')      IS NOT NULL DROP TABLE dbo.Project;   -- FK -> Customer, drop before Customer
 IF OBJECT_ID(N'dbo.Customer', N'U')     IS NOT NULL DROP TABLE dbo.Customer;
 IF OBJECT_ID(N'dbo.Resource', N'U')     IS NOT NULL DROP TABLE dbo.Resource;
+IF OBJECT_ID(N'dbo.MasterItem', N'U')   IS NOT NULL DROP TABLE dbo.MasterItem;
 IF OBJECT_ID(N'dbo.UserRole', N'U')     IS NOT NULL DROP TABLE dbo.UserRole;
 IF OBJECT_ID(N'dbo.[Role]', N'U')       IS NOT NULL DROP TABLE dbo.[Role];
 IF OBJECT_ID(N'dbo.[User]', N'U')       IS NOT NULL DROP TABLE dbo.[User];
 IF OBJECT_ID(N'dbo.AppConfig', N'U')        IS NOT NULL DROP TABLE dbo.AppConfig;
 IF OBJECT_ID(N'dbo.D365SyncLog', N'U')       IS NOT NULL DROP TABLE dbo.D365SyncLog;
+IF OBJECT_ID(N'dbo.D365TimesheetStaging', N'U') IS NOT NULL DROP TABLE dbo.D365TimesheetStaging;
+IF OBJECT_ID(N'dbo.D365TaskStaging', N'U')    IS NOT NULL DROP TABLE dbo.D365TaskStaging;   -- FK -> D365ProjectStaging
 IF OBJECT_ID(N'dbo.D365ProjectStaging', N'U') IS NOT NULL DROP TABLE dbo.D365ProjectStaging;
 IF OBJECT_ID(N'dbo.D365BcSetting', N'U')      IS NOT NULL DROP TABLE dbo.D365BcSetting;
 GO
@@ -87,6 +90,21 @@ CREATE TABLE dbo.Customer (
 GO
 
 /* ============================================================
+   Master Item (synced from D365BC — number/displayName/itemCategoryCode).
+   Used to map jobPlanningLines.number -> itemCategoryCode when computing revenue.
+   ============================================================ */
+CREATE TABLE dbo.MasterItem (
+    ItemId           INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_MasterItem PRIMARY KEY,
+    Number           NVARCHAR(50)  NOT NULL,      -- BC item "number", business key
+    DisplayName      NVARCHAR(300) NOT NULL CONSTRAINT DF_MasterItem_Name DEFAULT (N''),
+    ItemCategoryCode NVARCHAR(50)  NULL,          -- e.g. IMPLEMENT / CUSTOMIZE
+    CreatedAt        DATETIME2(0)  NOT NULL CONSTRAINT DF_MasterItem_Created DEFAULT (SYSUTCDATETIME()),
+    UpdatedAt        DATETIME2(0)  NULL,
+    CONSTRAINT UQ_MasterItem_Number UNIQUE (Number)
+);
+GO
+
+/* ============================================================
    Project -> Task -> MandayEntry
    ============================================================ */
 CREATE TABLE dbo.Project (
@@ -118,6 +136,8 @@ CREATE TABLE dbo.Task (
     ProjectId     INT NOT NULL,
     Name          NVARCHAR(300) NOT NULL,     -- e.g. Planning
     Description   NVARCHAR(MAX) NULL,
+    ItemCategoryCode NVARCHAR(50) NULL,        -- from D365 job task's planning-line item (IMPLEMENT/CUSTOMIZE/…)
+    Revenue       DECIMAL(18,2) NULL,          -- from D365 (Σ Billable revenue-category lineAmountLCY for this task)
     Status        NVARCHAR(30) NOT NULL CONSTRAINT DF_Task_Status DEFAULT (N'Open'),
     SortOrder     INT NOT NULL CONSTRAINT DF_Task_SortOrder DEFAULT (0),
     CreatedAt     DATETIME2(0) NOT NULL CONSTRAINT DF_Task_CreatedAt DEFAULT (SYSUTCDATETIME()),
@@ -133,11 +153,13 @@ CREATE TABLE dbo.MandayEntry (
     TaskId        INT NOT NULL,
     EntryType     NVARCHAR(10) NOT NULL,
     ResourceId    INT NULL,                   -- nullable: Adjust rows may not map to a person
-    Manday        DECIMAL(9,2) NOT NULL,      -- supports half-days e.g. 1.5
+    Manday        DECIMAL(11,4) NOT NULL,     -- supports half-days e.g. 1.5, and finer MD from timesheets (0.375)
     EntryDate     DATE NULL,
     StartDate     DATE NULL,                  -- planned/actual start
     EndDate       DATE NULL,                  -- defaults to StartDate, editable
     Note          NVARCHAR(500) NULL,
+    SourceSystemId NVARCHAR(100) NULL,        -- D365 timesheet systemId when applied from the Timesheet screen
+    AppliedAt     DATETIME2(0) NULL,          -- when this Actual was applied from a timesheet
     CreatedAt     DATETIME2(0) NOT NULL CONSTRAINT DF_Manday_CreatedAt DEFAULT (SYSUTCDATETIME()),
     UpdatedAt     DATETIME2(0) NULL,
     CONSTRAINT FK_Manday_Task     FOREIGN KEY (TaskId)     REFERENCES dbo.Task(TaskId) ON DELETE CASCADE,
@@ -150,6 +172,7 @@ GO
 CREATE INDEX IX_Task_ProjectId        ON dbo.Task(ProjectId);
 CREATE INDEX IX_Manday_TaskId         ON dbo.MandayEntry(TaskId);
 CREATE INDEX IX_Manday_Task_Type      ON dbo.MandayEntry(TaskId, EntryType);
+CREATE INDEX IX_Manday_SourceSystemId ON dbo.MandayEntry(SourceSystemId);
 GO
 
 /* ============================================================
@@ -220,6 +243,53 @@ CREATE TABLE dbo.D365ProjectStaging (
     CreatedAt           DATETIME2(0)  NOT NULL CONSTRAINT DF_D365Stg_Created DEFAULT (SYSUTCDATETIME()),
     UpdatedAt           DATETIME2(0)  NULL,
     CONSTRAINT UQ_D365ProjectStaging_JobNo UNIQUE (JobNo)
+);
+GO
+
+/* ------------------------------------------------------------
+   D365BC task staging — job tasks (Task No + Description) pulled per
+   staged project. Removed with the parent (promoted or deleted).
+   ------------------------------------------------------------ */
+CREATE TABLE dbo.D365TaskStaging (
+    TaskStagingId   INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_D365TaskStaging PRIMARY KEY,
+    StagingId       INT NOT NULL,                -- parent D365ProjectStaging
+    JobNo           NVARCHAR(50)  NOT NULL,      -- denormalised BC job "no"
+    TaskNo          NVARCHAR(50)  NOT NULL,      -- BC jobTaskNo -> Task.Name
+    TaskDescription NVARCHAR(300) NULL,          -- BC description -> Task.Description
+    ItemCategoryCode NVARCHAR(50) NULL,          -- derived from the task's planning-line item category
+    Revenue         DECIMAL(18,2) NULL,          -- Σ Billable lineAmountLCY (IMPLEMENT/CUSTOMIZE/MA) for this task
+    SortOrder       INT NOT NULL CONSTRAINT DF_D365TaskStg_Sort DEFAULT (0),
+    CreatedAt       DATETIME2(0)  NOT NULL CONSTRAINT DF_D365TaskStg_Created DEFAULT (SYSUTCDATETIME()),
+    CONSTRAINT FK_D365TaskStaging_Project FOREIGN KEY (StagingId)
+        REFERENCES dbo.D365ProjectStaging(StagingId) ON DELETE CASCADE,
+    CONSTRAINT UQ_D365TaskStaging_Staging_TaskNo UNIQUE (StagingId, TaskNo)
+);
+GO
+
+/* ------------------------------------------------------------
+   D365BC timesheet staging — timesheet lines pulled for a date range,
+   reviewed/remapped (New Job/Task) then applied as Actual mandays.
+   SystemId (BC systemId) is the upsert/dedup key.
+   ------------------------------------------------------------ */
+CREATE TABLE dbo.D365TimesheetStaging (
+    TimesheetStagingId INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_D365TimesheetStaging PRIMARY KEY,
+    SystemId        NVARCHAR(100) NOT NULL,      -- BC systemId (upsert key)
+    JobNo           NVARCHAR(50)  NULL,
+    JobTaskNo       NVARCHAR(50)  NULL,
+    TimesheetDate   DATE          NULL,          -- API startDate
+    ResourceNo      NVARCHAR(50)  NULL,          -- API "no" (resource code), shown as "No."
+    QuantityHour    DECIMAL(18,2) NULL,          -- API quantity
+    QuantityMD      DECIMAL(18,4) NULL,          -- API quantityMD
+    Comment         NVARCHAR(500) NULL,
+    ProjectManager  NVARCHAR(50)  NULL,
+    TimesheetStatus NVARCHAR(30)  NULL,
+    NewJobNo        NVARCHAR(50)  NULL,          -- default = JobNo, user-editable (map to Project)
+    NewTaskNo       NVARCHAR(50)  NULL,          -- default = JobTaskNo, user-editable (map to Task)
+    RawJson         NVARCHAR(MAX) NULL,
+    FetchedAt       DATETIME2(0)  NOT NULL CONSTRAINT DF_D365Ts_Fetched DEFAULT (SYSUTCDATETIME()),
+    CreatedAt       DATETIME2(0)  NOT NULL CONSTRAINT DF_D365Ts_Created DEFAULT (SYSUTCDATETIME()),
+    UpdatedAt       DATETIME2(0)  NULL,
+    CONSTRAINT UQ_D365TimesheetStaging_SystemId UNIQUE (SystemId)
 );
 GO
 

@@ -19,7 +19,7 @@ public record ProjectUpsert(string Code, string Name, string? Description, int? 
     decimal? Revenue, DateOnly? StartDate, DateOnly? EndDate);
 
 // ---- Task ----
-public record TaskDto(int TaskId, int ProjectId, string Name, string? Description, string Status, int SortOrder);
+public record TaskDto(int TaskId, int ProjectId, string Name, string? Description, string? ItemCategoryCode, decimal? Revenue, string Status, int SortOrder);
 public record TaskUpsert(string Name, string? Description, string Status, int SortOrder);
 
 // ---- Manday ----
@@ -36,6 +36,10 @@ public record UserUpsert(string Email, string DisplayName, bool IsActive, string
 // ---- Resource ----
 public record ResourceDto(int ResourceId, string Code, string Name, string? Position, bool IsActive);
 public record ResourceUpsert(string Code, string Name, string? Position, bool IsActive);
+
+// ---- Master Item (synced from D365BC) ----
+public record MasterItemDto(int ItemId, string Number, string DisplayName, string? ItemCategoryCode, DateTime? UpdatedAt);
+public record MasterItemFetchResult(int Fetched, int Inserted, int Updated, List<string> Errors);
 
 // ---- Summary ----
 public record TaskSummaryDto(int TaskId, string TaskName, decimal TotalBudget, decimal TotalActual,
@@ -63,12 +67,24 @@ public record D365SettingUpsert(string TenantId, string EnvironmentId, string Co
 public record D365TestResult(bool Success, string Message);
 public record D365StagingDto(int StagingId, string JobNo, string? ProjectName, string? ProjectManagerCode,
     string? CustomerNo, string? CustomerName, string? Type, decimal? Revenue,
-    DateTime FetchedAt, bool AlreadyExists, int? ExistingProjectId);
+    DateTime FetchedAt, bool AlreadyExists, int? ExistingProjectId, List<D365TaskStagingDto> Tasks);
+public record D365TaskStagingDto(int TaskStagingId, string TaskNo, string? TaskDescription, string? ItemCategoryCode, decimal? Revenue);
 public record D365StagingUpsert(string JobNo, string? ProjectName, string? CustomerNo, string? CustomerName,
     string? Type, decimal? Revenue);
 public record D365FetchResult(int Fetched, int Inserted, int Updated, string MaxCodeUsed, List<string> Errors);
 public record CreateProjectsResult(int Created, int Skipped, List<string> Errors);
-public record DeleteStagingRequest(int[] Ids);
+public record StagingIdsRequest(int[] Ids);
+public record FetchByJobRequest(string JobNo);
+
+// ---- D365BC Timesheet staging ----
+public record D365TimesheetRow(int Id, string SystemId, string? JobNo, string? JobTaskNo,
+    DateOnly? TimesheetDate, string? ResourceNo, string? ResourceName, decimal? QuantityHour, decimal? QuantityMD,
+    string? Comment, string? ProjectManager, string? TimesheetStatus,
+    string? NewJobNo, string? NewTaskNo, string ValidateStatus, string ValidateNewStatus, bool AlreadyInActual);
+public record D365TimesheetUpsert(string? NewJobNo, string? NewTaskNo);
+public record D365TimesheetFetchRequest(DateOnly StartDate, DateOnly EndDate);
+public record D365TimesheetFetchResult(int Fetched, int Inserted, int Updated, string Year, List<string> Errors);
+public record D365ApplyResult(int Applied, int Skipped, List<string> Errors);
 
 // ---- Manday Summary (pivot: project × resource position) ----
 public record MandaySummaryCell(string Position, decimal BudgetAdjust, decimal Actual, decimal Remaining);

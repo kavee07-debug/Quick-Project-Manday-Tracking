@@ -57,6 +57,21 @@
     max-width: 360px;
   }
 
+  &__byjob {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    input { width: 220px; }
+  }
+
+  &__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    white-space: nowrap;
+    select { width: auto; cursor: pointer; }
+  }
+
   &__check {
     width: 40px;
     text-align: center;
@@ -65,6 +80,53 @@
 
   &__row--selected {
     background: var(--color-primary-soft);
+  }
+
+  // ---- Task sub-table (expandable per project) ----
+  &__ma,
+  &__lic {
+    margin-left: var(--space-2);
+    cursor: help;
+  }
+
+  // Revenue cell highlight for jobs that have an MA task.
+  &__revenue--ma {
+    background: #fff3cd;
+    color: #7a5c00;
+    font-weight: 600;
+  }
+
+  &__expand {
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    border-radius: var(--radius-sm);
+    padding: 0 var(--space-2);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    color: var(--color-text-muted);
+    &:disabled { opacity: 0.4; cursor: default; }
+  }
+
+  &__subrow > td {
+    background: var(--color-surface-muted, rgba(0, 0, 0, 0.02));
+    padding: var(--space-3) var(--space-4);
+  }
+
+  &__tasks-title {
+    font-weight: 600;
+    margin-bottom: var(--space-2);
+  }
+
+  &__subtable {
+    width: 100%;
+    border-collapse: collapse;
+    th, td {
+      text-align: left;
+      padding: var(--space-1) var(--space-3);
+      border-bottom: 1px solid var(--color-border);
+      font-size: var(--font-size-sm);
+    }
+    th { color: var(--color-text-muted); font-weight: 600; }
   }
 
   // ---- Fetch progress dialog ----
@@ -96,6 +158,55 @@
     border-top-color: var(--color-primary);
     border-radius: 50%;
     animation: d365spin 0.8s linear infinite;
+  }
+
+  &__vicon {
+    font-size: var(--font-size-md);
+    line-height: 1;
+    cursor: help;
+  }
+
+  // New Job No rendered as an inline link-button; clicking it opens the edit modal.
+  &__linkcell {
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    &:hover { color: var(--color-navy-hover); }
+  }
+
+  // Searchable New Job combobox (input + floating result list).
+  &__combo {
+    position: relative;
+    .input { width: 100%; }
+  }
+
+  &__combolist {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 2px);
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: var(--space-1);
+    list-style: none;
+    max-height: 240px;
+    overflow-y: auto;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+
+    li {
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      &:hover { background: var(--color-surface-alt, rgba(0, 0, 0, 0.05)); }
+    }
   }
 }
 
