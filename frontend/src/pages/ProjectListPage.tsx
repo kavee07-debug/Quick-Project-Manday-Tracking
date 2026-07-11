@@ -3,13 +3,13 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import {
   PROJECT_STATUSES,
-  PROJECT_TYPES,
   type Customer,
   type Project,
   type ProjectUpsert,
 } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../components/Modal';
+import { ProjectFormFields } from '../components/ProjectFormFields';
 import { ImportExportBar } from '../components/ImportExportBar';
 import { ProgressBar } from '../components/ProgressBar';
 import { StatusBadge } from '../components/StatusBadge';
@@ -65,6 +65,14 @@ function sortValue(p: Project, key: SortKey): string | number | null {
 
 const PAGE_SIZES = [20, 30, 50, 100] as const;
 
+// Status → badge modifier class (mirrors StatusBadge), used for the summary/filter chips.
+const STATUS_CHIP: Record<string, string> = {
+  Open: 'badge--green',
+  Hold: 'badge--orange',
+  Completed: 'badge--blue',
+  Cancel: 'badge--red',
+};
+
 const empty: ProjectUpsert = {
   code: '',
   name: '',
@@ -74,6 +82,7 @@ const empty: ProjectUpsert = {
   status: 'Open',
   progress: null,
   revenue: null,
+  timesheetMapping: null,
   startDate: null,
   endDate: null,
 };
@@ -90,6 +99,7 @@ export default function ProjectListPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' } | null>(null);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [pageSize, setPageSize] = useState<number>(20);
   const [page, setPage] = useState(1);
 
@@ -116,7 +126,8 @@ export default function ProjectListPage() {
     api.get<Customer[]>('/customers').then(setCustomers).catch(() => setCustomers([]));
   }, []);
 
-  const filtered = useMemo(
+  // Search filter first (status chips count against this set, unaffected by status selection).
+  const searched = useMemo(
     () =>
       query
         ? projects.filter(
@@ -125,6 +136,29 @@ export default function ProjectListPage() {
         : projects,
     [projects, query],
   );
+
+  // Count per status for the summary/filter chips.
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const s of PROJECT_STATUSES) counts[s] = 0;
+    for (const p of searched) counts[p.status] = (counts[p.status] ?? 0) + 1;
+    return counts;
+  }, [searched]);
+
+  // Then apply the status-chip selection (empty selection = show all).
+  const filtered = useMemo(
+    () => (statusFilter.size === 0 ? searched : searched.filter((p) => statusFilter.has(p.status))),
+    [searched, statusFilter],
+  );
+
+  function toggleStatus(s: string) {
+    setStatusFilter((cur) => {
+      const next = new Set(cur);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  }
 
   const sorted = useMemo(() => {
     if (!sort) return filtered;
@@ -151,11 +185,33 @@ export default function ProjectListPage() {
   // Reset to the first page whenever the result set or page size changes.
   useEffect(() => {
     setPage(1);
-  }, [query, sort, pageSize]);
+  }, [query, sort, pageSize, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const paged = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Pagination controls, shown both above (in the status row) and below the table.
+  const renderPager = (extra = '') => (
+    <div className={`projects__pager ${extra}`.trim()}>
+      <label className="projects__pager-size">
+        แสดง
+        <select className="input" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+          {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+        ต่อหน้า · ทั้งหมด {sorted.length} รายการ
+      </label>
+      <div className="projects__pager-nav">
+        <button className="btn btn--sm" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>
+          ‹ ก่อนหน้า
+        </button>
+        <span className="muted">หน้า {currentPage} / {totalPages}</span>
+        <button className="btn btn--sm" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)}>
+          ถัดไป ›
+        </button>
+      </div>
+    </div>
+  );
 
   const kpi = useMemo(
     () =>
@@ -188,6 +244,7 @@ export default function ProjectListPage() {
       status: p.status,
       progress: p.progress ?? null,
       revenue: p.revenue ?? null,
+      timesheetMapping: p.timesheetMapping ?? null,
       startDate: p.startDate ?? null,
       endDate: p.endDate ?? null,
     });
@@ -268,6 +325,32 @@ export default function ProjectListPage() {
         />
       </div>
 
+      <div className="projects__statusbar">
+        <span className="projects__statusbar-label">สถานะ:</span>
+        {PROJECT_STATUSES.map((s) => {
+          const active = statusFilter.has(s);
+          return (
+            <button
+              key={s}
+              type="button"
+              className={`status-chip ${STATUS_CHIP[s] ?? ''} ${active ? 'is-active' : ''}`}
+              aria-pressed={active}
+              title={active ? `คลิกอีกครั้งเพื่อยกเลิกกรอง ${s}` : `กรองเฉพาะ ${s}`}
+              onClick={() => toggleStatus(s)}
+            >
+              <span className="status-chip__name">{s}</span>
+              <span className="status-chip__count">{statusCounts[s] ?? 0}</span>
+            </button>
+          );
+        })}
+        {statusFilter.size > 0 && (
+          <button type="button" className="btn btn--sm projects__statusbar-clear" onClick={() => setStatusFilter(new Set())}>
+            ล้างตัวกรอง
+          </button>
+        )}
+        {!loading && sorted.length > 0 && renderPager('projects__pager--top')}
+      </div>
+
       {error && <p className="error-text">{error}</p>}
 
       <div className="card">
@@ -293,7 +376,7 @@ export default function ProjectListPage() {
             {loading ? (
               <tr><td colSpan={12} className="muted">กำลังโหลด…</td></tr>
             ) : sorted.length === 0 ? (
-              <tr><td colSpan={12} className="muted">{query ? 'ไม่พบโปรเจกต์ที่ค้นหา' : 'ยังไม่มีโปรเจกต์'}</td></tr>
+              <tr><td colSpan={12} className="muted">{query || statusFilter.size > 0 ? 'ไม่พบโปรเจกต์ตามเงื่อนไข' : 'ยังไม่มีโปรเจกต์'}</td></tr>
             ) : (
               paged.map((p) => (
                 <tr key={p.projectId}>
@@ -330,70 +413,12 @@ export default function ProjectListPage() {
         </table>
       </div>
 
-      {!loading && sorted.length > 0 && (
-        <div className="projects__pager">
-          <label className="projects__pager-size">
-            แสดง
-            <select className="input" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
-              {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-            ต่อหน้า · ทั้งหมด {sorted.length} รายการ
-          </label>
-          <div className="projects__pager-nav">
-            <button className="btn btn--sm" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>
-              ‹ ก่อนหน้า
-            </button>
-            <span className="muted">หน้า {currentPage} / {totalPages}</span>
-            <button className="btn btn--sm" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)}>
-              ถัดไป ›
-            </button>
-          </div>
-        </div>
-      )}
+      {!loading && sorted.length > 0 && renderPager()}
 
       {showForm && (
         <Modal title={editing ? 'แก้ไขโปรเจกต์' : 'เพิ่มโปรเจกต์'} onClose={() => setShowForm(false)}>
           <form onSubmit={submit}>
-            <label className="field-label">รหัสโปรเจกต์</label>
-            <input className="input" value={form.code}
-              onChange={(e) => setForm({ ...form, code: e.target.value })} required />
-
-            <label className="field-label">ชื่อ</label>
-            <input className="input" value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-
-            <label className="field-label">รายละเอียด</label>
-            <input className="input" value={form.description ?? ''}
-              onChange={(e) => setForm({ ...form, description: e.target.value })} />
-
-            <label className="field-label">ลูกค้า (Customer)</label>
-            <select className="input" value={form.customerId ?? ''}
-              onChange={(e) => setForm({ ...form, customerId: e.target.value === '' ? null : Number(e.target.value) })}>
-              <option value="">— ไม่ระบุ —</option>
-              {customers.map((c) => (
-                <option key={c.customerId} value={c.customerId}>{c.code} · {c.name}</option>
-              ))}
-            </select>
-
-            <label className="field-label">ประเภท (Type)</label>
-            <select className="input" value={form.type ?? ''}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}>
-              {PROJECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-
-            <label className="field-label">สถานะ (Status)</label>
-            <select className="input" value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value })}>
-              {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-
-            <label className="field-label">Progress (%)</label>
-            <input className="input" type="number" step="0.01" min="0" max="100" value={form.progress ?? ''}
-              onChange={(e) => setForm({ ...form, progress: e.target.value === '' ? null : Number(e.target.value) })} />
-
-            <label className="field-label">มูลค่าโครงการ (Revenue)</label>
-            <input className="input" type="number" step="0.01" min="0" value={form.revenue ?? ''}
-              onChange={(e) => setForm({ ...form, revenue: e.target.value === '' ? null : Number(e.target.value) })} />
+            <ProjectFormFields form={form} setForm={setForm} customers={customers} />
 
             {formError && <p className="error-text">{formError}</p>}
             <div className="form-actions">

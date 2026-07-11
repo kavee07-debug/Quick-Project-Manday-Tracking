@@ -103,4 +103,8 @@ public class D365TimesheetController(QtmDbContext db, D365TimesheetService times
         try { return Ok(await timesheets.ApplyAsync(req.Ids ?? [], ct)); }
         catch (D365BcException ex) { return BadRequest(new { message = ex.Message }); }
     }
+
+    [HttpPost("auto-map")]
+    public async Task<ActionResult<D365TimesheetAutoMapResult>> AutoMap(StagingIdsRequest req, CancellationToken ct)
+        => Ok(await timesheets.AutoMapAsync(req.Ids ?? [], ct));
 }

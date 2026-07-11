@@ -47,6 +47,7 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.Property(x => x.Status).HasMaxLength(30);
             e.Property(x => x.Progress).HasColumnType("decimal(5,2)");
             e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
+            e.Property(x => x.TimesheetMapping).HasMaxLength(200);
             e.HasIndex(x => x.Code).IsUnique();
             e.HasOne(x => x.Customer)
                 .WithMany(c => c.Projects)

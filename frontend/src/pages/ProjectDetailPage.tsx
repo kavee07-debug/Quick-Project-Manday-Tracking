@@ -5,6 +5,7 @@ import type { Project } from '../api/types';
 import { Tabs } from '../components/Tabs';
 import { TaskTab } from '../components/TaskTab';
 import { EstimateActualTab } from '../components/EstimateActualTab';
+import { ProjectTab } from '../components/ProjectTab';
 import './ProjectDetailPage.scss';
 
 export default function ProjectDetailPage() {
@@ -37,6 +38,7 @@ export default function ProjectDetailPage() {
         tabs={[
           { key: 'tasks', label: 'Task' },
           { key: 'manday', label: 'Estimate & Actual' },
+          { key: 'project', label: 'Project' },
         ]}
         active={tab}
         onChange={setTab}
@@ -44,8 +46,10 @@ export default function ProjectDetailPage() {
 
       {tab === 'tasks' ? (
         <TaskTab projectId={projectId} />
-      ) : (
+      ) : tab === 'manday' ? (
         <EstimateActualTab projectId={projectId} projectCode={project.code} projectRevenue={project.revenue} />
+      ) : (
+        <ProjectTab project={project} onChanged={setProject} />
       )}
     </div>
   );

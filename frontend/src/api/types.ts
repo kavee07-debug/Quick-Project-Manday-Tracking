@@ -42,6 +42,7 @@ export interface Project {
   status: string;
   progress?: number | null; // completion %, e.g. 70.01 (0..100)
   revenue?: number | null;
+  timesheetMapping?: string | null; // D365 timesheet map key(s) "JobNo,TaskNo" (default = code)
   startDate?: string | null;
   endDate?: string | null;
   // Manday rollups (read-only): Remaining = (totalBudget + totalAdjust) - totalActual
@@ -259,6 +260,11 @@ export interface D365ApplyResult {
   applied: number;
   skipped: number;
   errors: string[];
+}
+
+export interface D365TimesheetAutoMapResult {
+  mapped: number;
+  unmatched: number;
 }
 
 export interface MandaySummaryCell {

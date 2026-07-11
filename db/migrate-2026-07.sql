@@ -13,7 +13,7 @@ USE QtmManday;
 GO
 
 /* ---- 1) MasterItem (D365BC item master) ---- */
-PRINT '1/6  MasterItem';
+PRINT '1/7  MasterItem';
 GO
 IF OBJECT_ID(N'dbo.MasterItem', N'U') IS NULL
 BEGIN
@@ -30,7 +30,7 @@ END
 GO
 
 /* ---- 2) D365TaskStaging (job tasks per staged project) ---- */
-PRINT '2/6  D365TaskStaging';
+PRINT '2/7  D365TaskStaging';
 GO
 IF OBJECT_ID(N'dbo.D365TaskStaging', N'U') IS NULL
 BEGIN
@@ -50,7 +50,7 @@ END
 GO
 
 /* ---- 3) ItemCategoryCode on Task + D365TaskStaging ---- */
-PRINT '3/6  ItemCategoryCode';
+PRINT '3/7  ItemCategoryCode';
 GO
 IF COL_LENGTH(N'dbo.Task', N'ItemCategoryCode') IS NULL
     ALTER TABLE dbo.Task ADD ItemCategoryCode NVARCHAR(50) NULL;
@@ -60,21 +60,21 @@ IF COL_LENGTH(N'dbo.D365TaskStaging', N'ItemCategoryCode') IS NULL
 GO
 
 /* ---- 4) Revenue on Task ---- */
-PRINT '4/6  Task.Revenue';
+PRINT '4/7  Task.Revenue';
 GO
 IF COL_LENGTH(N'dbo.Task', N'Revenue') IS NULL
     ALTER TABLE dbo.Task ADD Revenue DECIMAL(18,2) NULL;
 GO
 
 /* ---- 5) Revenue on D365TaskStaging ---- */
-PRINT '5/6  D365TaskStaging.Revenue';
+PRINT '5/7  D365TaskStaging.Revenue';
 GO
 IF COL_LENGTH(N'dbo.D365TaskStaging', N'Revenue') IS NULL
     ALTER TABLE dbo.D365TaskStaging ADD Revenue DECIMAL(18,2) NULL;
 GO
 
 /* ---- 6) D365TimesheetStaging + MandayEntry apply-traceability ---- */
-PRINT '6/6  D365TimesheetStaging + MandayEntry';
+PRINT '6/7  D365TimesheetStaging + MandayEntry';
 GO
 IF OBJECT_ID(N'dbo.D365TimesheetStaging', N'U') IS NULL
 BEGIN
@@ -113,6 +113,16 @@ IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.MandayEnt
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Manday_SourceSystemId' AND object_id = OBJECT_ID(N'dbo.MandayEntry'))
     CREATE INDEX IX_Manday_SourceSystemId ON dbo.MandayEntry(SourceSystemId);
+GO
+
+/* ---- 7) Project.TimesheetMapping (D365 timesheet auto-map key) ---- */
+PRINT '7/7  Project.TimesheetMapping';
+GO
+IF COL_LENGTH(N'dbo.Project', N'TimesheetMapping') IS NULL
+    ALTER TABLE dbo.Project ADD TimesheetMapping NVARCHAR(200) NULL;
+GO
+-- Backfill existing rows so every project has a default mapping = its Code.
+UPDATE dbo.Project SET TimesheetMapping = Code WHERE TimesheetMapping IS NULL;
 GO
 
 PRINT 'migrate-2026-07: done.';

@@ -12,6 +12,9 @@ public class Project
     public string Status { get; set; } = "Open";           // Open | Hold | Completed | Cancel
     public decimal? Progress { get; set; }                 // completion %, e.g. 70.01 (0..100)
     public decimal? Revenue { get; set; }                  // project value / revenue
+    // D365 timesheet mapping key(s): "JobNo,TaskNo" (default = Code). Used to auto-map timesheet
+    // lines to this project. Multiple keys may be separated by ';' or newline.
+    public string? TimesheetMapping { get; set; }
     public DateOnly? StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
     public DateTime CreatedAt { get; set; }

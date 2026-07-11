@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
 import type {
   D365ApplyResult,
+  D365TimesheetAutoMapResult,
   D365TimesheetFetchResult,
   D365TimesheetRow,
   Project,
@@ -187,6 +188,20 @@ export default function D365TimesheetPage() {
     finally { setBusy(false); }
   }
 
+  // Auto-map New Job No/Task for the selected rows via each project's Timesheet Mapping.
+  async function autoMapSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    setBusy(true);
+    try {
+      const res = await api.post<D365TimesheetAutoMapResult>('/d365/timesheet/auto-map', { ids });
+      await load();
+      alert(`Auto Mapping: จับคู่สำเร็จ ${res.mapped} รายการ · ไม่พบใน mapping ${res.unmatched} รายการ`);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : 'Auto Mapping ไม่สำเร็จ');
+    } finally { setBusy(false); }
+  }
+
   async function applySelected() {
     const ids = [...selected];
     if (ids.length === 0) return;
@@ -230,6 +245,10 @@ export default function D365TimesheetPage() {
           </label>
           <button className="btn btn--primary" onClick={fetchFromBc} disabled={!canFetch}>
             ⬇ ดึงข้อมูลจาก D365BC
+          </button>
+          <button className="btn" onClick={autoMapSelected} disabled={busy || selected.size === 0}
+            title="จับคู่ New Job No/Task จาก Projects timesheet mapping">
+            🔗 Auto Map New Job ({selected.size})
           </button>
           <button className="btn btn--primary" onClick={applySelected} disabled={busy || selected.size === 0}>
             ✓ Apply เป็น Actual ({selected.size})

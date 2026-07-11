@@ -12,11 +12,11 @@ public record CustomerUpsert(string Code, string Name, bool IsActive);
 public record ProjectDto(int ProjectId, string Code, string Name, string? Description,
     int? CustomerId, string? CustomerCode, string? CustomerName,
     string? Type, string Status, decimal? Progress,
-    decimal? Revenue, DateOnly? StartDate, DateOnly? EndDate,
+    decimal? Revenue, string? TimesheetMapping, DateOnly? StartDate, DateOnly? EndDate,
     decimal TotalBudget, decimal TotalAdjust, decimal TotalActual, decimal Remaining);
 public record ProjectUpsert(string Code, string Name, string? Description, int? CustomerId,
     string? Type, string Status, decimal? Progress,
-    decimal? Revenue, DateOnly? StartDate, DateOnly? EndDate);
+    decimal? Revenue, string? TimesheetMapping, DateOnly? StartDate, DateOnly? EndDate);
 
 // ---- Task ----
 public record TaskDto(int TaskId, int ProjectId, string Name, string? Description, string? ItemCategoryCode, decimal? Revenue, string Status, int SortOrder);
@@ -85,6 +85,8 @@ public record D365TimesheetUpsert(string? NewJobNo, string? NewTaskNo);
 public record D365TimesheetFetchRequest(DateOnly StartDate, DateOnly EndDate);
 public record D365TimesheetFetchResult(int Fetched, int Inserted, int Updated, string Year, List<string> Errors);
 public record D365ApplyResult(int Applied, int Skipped, List<string> Errors);
+// Auto-map result: how many staged rows got a New Job/Task from a project's TimesheetMapping.
+public record D365TimesheetAutoMapResult(int Mapped, int Unmatched);
 
 // ---- Manday Summary (pivot: project × resource position) ----
 public record MandaySummaryCell(string Position, decimal BudgetAdjust, decimal Actual, decimal Remaining);

@@ -117,6 +117,7 @@ CREATE TABLE dbo.Project (
     Status        NVARCHAR(30) NOT NULL CONSTRAINT DF_Project_Status DEFAULT (N'Open'),
     Progress      DECIMAL(5,2) NULL,          -- completion %, e.g. 70.01 (0..100)
     Revenue       DECIMAL(18,2) NULL,         -- project value / revenue
+    TimesheetMapping NVARCHAR(200) NULL,      -- D365 timesheet map key(s) "JobNo,TaskNo" (default = Code)
     StartDate     DATE NULL,
     EndDate       DATE NULL,
     CreatedAt     DATETIME2(0) NOT NULL CONSTRAINT DF_Project_CreatedAt DEFAULT (SYSUTCDATETIME()),

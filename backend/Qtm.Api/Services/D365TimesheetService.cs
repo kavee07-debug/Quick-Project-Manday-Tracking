@@ -185,6 +185,59 @@ public class D365TimesheetService(QtmDbContext db, D365BcClient client)
         return new D365ApplyResult(applied, skipped, errors);
     }
 
+    /// <summary>
+    /// Auto-map the selected staged rows: for each row, build the key "JobNo,JobTaskNo" (from the
+    /// original API values) and look it up against every project's TimesheetMapping. On a hit, set
+    /// NewJobNo = the matched project's Code and NewTaskNo = the timesheet's Task No. Rows with no
+    /// match are left unchanged.
+    /// </summary>
+    public async Task<D365TimesheetAutoMapResult> AutoMapAsync(int[] ids, CancellationToken ct = default)
+    {
+        if (ids is null || ids.Length == 0) return new D365TimesheetAutoMapResult(0, 0);
+
+        var rows = await db.D365TimesheetStagings.Where(x => ids.Contains(x.TimesheetStagingId)).ToListAsync(ct);
+
+        // Build "JobNo,TaskNo" key -> Project.Code from every project's TimesheetMapping.
+        // A project may list several keys separated by ';' or newline. First project wins on a clash.
+        var map = new Dictionary<string, string>();
+        var projects = await db.Projects
+            .Where(p => p.TimesheetMapping != null && p.TimesheetMapping != "")
+            .Select(p => new { p.Code, p.TimesheetMapping })
+            .ToListAsync(ct);
+        foreach (var p in projects)
+        {
+            foreach (var entry in p.TimesheetMapping!.Split([';', '\n', '\r'],
+                         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var key = NormKey(entry);
+                if (key.Length > 0 && !map.ContainsKey(key)) map[key] = p.Code;
+            }
+        }
+
+        var mapped = 0;
+        var unmatched = 0;
+        foreach (var row in rows)
+        {
+            var key = NormKey($"{row.JobNo},{row.JobTaskNo}");
+            if (map.TryGetValue(key, out var code))
+            {
+                row.NewJobNo = code;
+                row.NewTaskNo = string.IsNullOrWhiteSpace(row.JobTaskNo) ? null : row.JobTaskNo!.Trim();
+                row.UpdatedAt = DateTime.UtcNow;
+                mapped++;
+            }
+            else unmatched++;
+        }
+
+        await db.SaveChangesAsync(ct);
+        await LogAsync("Success", $"auto-map: mapped={mapped}, unmatched={unmatched}", ct);
+        return new D365TimesheetAutoMapResult(mapped, unmatched);
+    }
+
+    // Normalise a "JobNo,TaskNo" mapping key: trim each comma-part, lowercase, rejoin with ','.
+    private static string NormKey(string s) =>
+        string.Join(",", s.Split(',').Select(p => p.Trim())).ToLowerInvariant();
+
     // Resolves a resource by code; auto-creates it when the code is new (name falls back to the code).
     // Null when the timesheet has no resource no. Uses a cache so repeats reuse the same new resource.
     private async Task<int?> ResolveResourceIdAsync(string? code, Dictionary<string, ResourceItem> cache)

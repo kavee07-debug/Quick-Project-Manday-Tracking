@@ -112,7 +112,7 @@ public class ImportExportController(QtmDbContext db, ExcelService excel) : Contr
                 {
                     Code = row.Code, Name = row.Name, Description = row.Description,
                     Customer = customer, Type = type, Status = status, Progress = row.Progress,
-                    Revenue = row.Revenue, StartDate = row.StartDate, EndDate = row.EndDate,
+                    Revenue = row.Revenue, TimesheetMapping = row.Code, StartDate = row.StartDate, EndDate = row.EndDate,
                     CreatedAt = DateTime.UtcNow,
                 });
                 created++;
