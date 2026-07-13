@@ -32,6 +32,9 @@ export default function ProjectDetailPage() {
       </div>
       <h1 className="detail__title">
         {project.code} — {project.name}
+        {project.type === 'Training' && project.trainingDate && (
+          <span className="detail__training"> {project.trainingDate}</span>
+        )}
       </h1>
 
       <Tabs

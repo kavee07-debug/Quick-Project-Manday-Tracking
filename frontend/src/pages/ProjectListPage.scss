@@ -65,6 +65,12 @@
     cursor: help;
   }
 
+  // Training date appended to the project name (purple), shown when Type = Training.
+  &__training {
+    color: var(--color-purple);
+    font-weight: var(--font-weight-medium);
+  }
+
   // Status summary + click-to-toggle filter chips.
   &__statusbar {
     display: flex;
@@ -80,6 +86,14 @@
   }
   &__statusbar-clear {
     margin-left: var(--space-1);
+  }
+  // Vertical divider between the Status and Type chip groups on the same row.
+  &__statusbar-sep {
+    width: 1px;
+    align-self: stretch;
+    min-height: 24px;
+    background: var(--color-border);
+    margin: 0 var(--space-2);
   }
 }
 
@@ -106,6 +120,7 @@
   &.badge--orange { --chip-color: var(--color-warning); }
   &.badge--blue   { --chip-color: var(--color-primary); }
   &.badge--red    { --chip-color: var(--color-danger); }
+  &.badge--purple { --chip-color: var(--color-purple); }
 
   // Reset the .badge base so it renders as a chip, not a solid badge, when idle.
   &.badge { display: inline-flex; color: var(--color-text); background: var(--color-surface); }

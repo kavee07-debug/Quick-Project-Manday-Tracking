@@ -15,6 +15,8 @@ public class Project
     // D365 timesheet mapping key(s): "JobNo,TaskNo" (default = Code). Used to auto-map timesheet
     // lines to this project. Multiple keys may be separated by ';' or newline.
     public string? TimesheetMapping { get; set; }
+    // Free text; when Type = Training it is appended to the project name in the UI.
+    public string? TrainingDate { get; set; }
     public DateOnly? StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
     public DateTime CreatedAt { get; set; }

@@ -40,6 +40,16 @@ export function ProjectFormFields({
         {PROJECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
       </select>
 
+      <label className="field-label">Training Date</label>
+      <input className="input" value={form.trainingDate ?? ''}
+        placeholder="เช่น 15-17 ก.ค. 2026"
+        onChange={(e) => setForm({ ...form, trainingDate: e.target.value === '' ? null : e.target.value })} />
+      {form.type === 'Training' && (
+        <p className="muted" style={{ marginTop: 'var(--space-1)' }}>
+          ประเภท = Training — ข้อความนี้จะแสดงต่อท้ายชื่อโปรเจกต์ (สีม่วง)
+        </p>
+      )}
+
       <label className="field-label">สถานะ (Status)</label>
       <select className="input" value={form.status}
         onChange={(e) => setForm({ ...form, status: e.target.value })}>

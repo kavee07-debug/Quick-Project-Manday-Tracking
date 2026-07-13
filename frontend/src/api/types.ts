@@ -43,6 +43,7 @@ export interface Project {
   progress?: number | null; // completion %, e.g. 70.01 (0..100)
   revenue?: number | null;
   timesheetMapping?: string | null; // D365 timesheet map key(s) "JobNo,TaskNo" (default = code)
+  trainingDate?: string | null; // free text; appended to name (purple) when type = Training
   startDate?: string | null;
   endDate?: string | null;
   // Manday rollups (read-only): Remaining = (totalBudget + totalAdjust) - totalActual

@@ -7,6 +7,10 @@
     margin: 0 0 var(--space-5);
     font-size: var(--font-size-xl);
   }
+  // Training date appended to the title (purple), when Type = Training.
+  &__training {
+    color: var(--color-purple);
+  }
 }
 
 .section-head {

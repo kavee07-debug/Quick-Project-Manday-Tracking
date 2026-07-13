@@ -193,7 +193,7 @@ public class D365Controller(QtmDbContext db, D365BcClient client, D365JobService
         return CreatedAtAction("Get", "Projects", new { id = p.ProjectId },
             new ProjectDto(p.ProjectId, p.Code, p.Name, p.Description,
                 p.CustomerId, customer?.Code, customer?.Name,
-                p.Type, p.Status, p.Progress, p.Revenue, p.TimesheetMapping, p.StartDate, p.EndDate, 0, 0, 0, 0));
+                p.Type, p.Status, p.Progress, p.Revenue, p.TimesheetMapping, p.TrainingDate, p.StartDate, p.EndDate, 0, 0, 0, 0));
     }
 
     // Update an EXISTING project from its staged row: refresh Name/Customer/Type/Revenue, create-or-update

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import {
   PROJECT_STATUSES,
+  PROJECT_TYPES,
   type Customer,
   type Project,
   type ProjectUpsert,
@@ -73,6 +74,14 @@ const STATUS_CHIP: Record<string, string> = {
   Cancel: 'badge--red',
 };
 
+// Type → chip color class (reuses the shared badge modifiers for the type filter chips).
+const TYPE_CHIP: Record<string, string> = {
+  Implement: 'badge--blue',
+  Customize: 'badge--orange',
+  Training: 'badge--purple',
+  Other: '',
+};
+
 const empty: ProjectUpsert = {
   code: '',
   name: '',
@@ -83,6 +92,7 @@ const empty: ProjectUpsert = {
   progress: null,
   revenue: null,
   timesheetMapping: null,
+  trainingDate: null,
   startDate: null,
   endDate: null,
 };
@@ -100,6 +110,7 @@ export default function ProjectListPage() {
 
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' } | null>(null);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [pageSize, setPageSize] = useState<number>(20);
   const [page, setPage] = useState(1);
 
@@ -137,28 +148,38 @@ export default function ProjectListPage() {
     [projects, query],
   );
 
-  // Count per status for the summary/filter chips.
+  // Count per status / type for the filter chips (counted against the search set, unaffected by chip selection).
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const s of PROJECT_STATUSES) counts[s] = 0;
     for (const p of searched) counts[p.status] = (counts[p.status] ?? 0) + 1;
     return counts;
   }, [searched]);
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const t of PROJECT_TYPES) counts[t] = 0;
+    for (const p of searched) if (p.type) counts[p.type] = (counts[p.type] ?? 0) + 1;
+    return counts;
+  }, [searched]);
 
-  // Then apply the status-chip selection (empty selection = show all).
-  const filtered = useMemo(
-    () => (statusFilter.size === 0 ? searched : searched.filter((p) => statusFilter.has(p.status))),
-    [searched, statusFilter],
-  );
+  // Then apply the status- and type-chip selections (empty selection = show all for that group).
+  const filtered = useMemo(() => {
+    let list = searched;
+    if (statusFilter.size > 0) list = list.filter((p) => statusFilter.has(p.status));
+    if (typeFilter.size > 0) list = list.filter((p) => p.type != null && typeFilter.has(p.type));
+    return list;
+  }, [searched, statusFilter, typeFilter]);
 
-  function toggleStatus(s: string) {
-    setStatusFilter((cur) => {
+  function toggleFrom(setFilter: typeof setStatusFilter, value: string) {
+    setFilter((cur) => {
       const next = new Set(cur);
-      if (next.has(s)) next.delete(s);
-      else next.add(s);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
       return next;
     });
   }
+  const toggleStatus = (s: string) => toggleFrom(setStatusFilter, s);
+  const toggleType = (t: string) => toggleFrom(setTypeFilter, t);
 
   const sorted = useMemo(() => {
     if (!sort) return filtered;
@@ -185,7 +206,7 @@ export default function ProjectListPage() {
   // Reset to the first page whenever the result set or page size changes.
   useEffect(() => {
     setPage(1);
-  }, [query, sort, pageSize, statusFilter]);
+  }, [query, sort, pageSize, statusFilter, typeFilter]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -245,6 +266,7 @@ export default function ProjectListPage() {
       progress: p.progress ?? null,
       revenue: p.revenue ?? null,
       timesheetMapping: p.timesheetMapping ?? null,
+      trainingDate: p.trainingDate ?? null,
       startDate: p.startDate ?? null,
       endDate: p.endDate ?? null,
     });
@@ -348,6 +370,31 @@ export default function ProjectListPage() {
             ล้างตัวกรอง
           </button>
         )}
+
+        <span className="projects__statusbar-sep" aria-hidden="true" />
+
+        <span className="projects__statusbar-label">ประเภท:</span>
+        {PROJECT_TYPES.map((t) => {
+          const active = typeFilter.has(t);
+          return (
+            <button
+              key={t}
+              type="button"
+              className={`status-chip ${TYPE_CHIP[t] ?? ''} ${active ? 'is-active' : ''}`}
+              aria-pressed={active}
+              title={active ? `คลิกอีกครั้งเพื่อยกเลิกกรอง ${t}` : `กรองเฉพาะ ${t}`}
+              onClick={() => toggleType(t)}
+            >
+              <span className="status-chip__name">{t}</span>
+              <span className="status-chip__count">{typeCounts[t] ?? 0}</span>
+            </button>
+          );
+        })}
+        {typeFilter.size > 0 && (
+          <button type="button" className="btn btn--sm projects__statusbar-clear" onClick={() => setTypeFilter(new Set())}>
+            ล้างตัวกรอง
+          </button>
+        )}
         {!loading && sorted.length > 0 && renderPager('projects__pager--top')}
       </div>
 
@@ -376,7 +423,7 @@ export default function ProjectListPage() {
             {loading ? (
               <tr><td colSpan={12} className="muted">กำลังโหลด…</td></tr>
             ) : sorted.length === 0 ? (
-              <tr><td colSpan={12} className="muted">{query || statusFilter.size > 0 ? 'ไม่พบโปรเจกต์ตามเงื่อนไข' : 'ยังไม่มีโปรเจกต์'}</td></tr>
+              <tr><td colSpan={12} className="muted">{query || statusFilter.size > 0 || typeFilter.size > 0 ? 'ไม่พบโปรเจกต์ตามเงื่อนไข' : 'ยังไม่มีโปรเจกต์'}</td></tr>
             ) : (
               paged.map((p) => (
                 <tr key={p.projectId}>
@@ -388,7 +435,12 @@ export default function ProjectListPage() {
                       <span className="projects__new" title="ยังไม่กำหนด Budget/Adjust — คลิกที่รหัสเพื่อไปกำหนด">🆕</span>
                     )}
                   </td>
-                  <td>{p.name}</td>
+                  <td>
+                    {p.name}
+                    {p.type === 'Training' && p.trainingDate && (
+                      <span className="projects__training"> {p.trainingDate}</span>
+                    )}
+                  </td>
                   <td>{p.customerName ? `${p.customerCode} · ${p.customerName}` : '—'}</td>
                   <td>{p.type ?? '—'}</td>
                   <td><StatusBadge status={p.status} /></td>

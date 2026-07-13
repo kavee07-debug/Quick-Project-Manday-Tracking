@@ -23,6 +23,7 @@ function toForm(p: Project): ProjectUpsert {
     progress: p.progress ?? null,
     revenue: p.revenue ?? null,
     timesheetMapping: p.timesheetMapping ?? null,
+    trainingDate: p.trainingDate ?? null,
     startDate: p.startDate ?? null,
     endDate: p.endDate ?? null,
   };
@@ -75,6 +76,9 @@ export function ProjectTab({ project, onChanged }: { project: Project; onChanged
     ['รายละเอียด', project.description || '—'],
     ['ลูกค้า', project.customerName ? `${project.customerCode} · ${project.customerName}` : '—'],
     ['ประเภท', project.type ?? '—'],
+    ['Training Date', project.trainingDate
+      ? <span style={{ color: 'var(--color-purple)', fontWeight: 'var(--font-weight-medium)' }}>{project.trainingDate}</span>
+      : '—'],
     ['สถานะ', <StatusBadge status={project.status} />],
     ['Progress', <ProgressBar value={project.progress} />],
     ['Revenue', project.revenue != null ? money(project.revenue) : '—'],

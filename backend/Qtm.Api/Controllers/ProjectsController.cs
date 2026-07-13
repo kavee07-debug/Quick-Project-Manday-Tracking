@@ -26,7 +26,7 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
         return new ProjectDto(p.ProjectId, p.Code, p.Name, p.Description,
             p.CustomerId, p.Customer?.Code, p.Customer?.Name,
             p.Type, p.Status, p.Progress,
-            p.Revenue, p.TimesheetMapping, p.StartDate, p.EndDate, budget, adjust, actual, (budget + adjust) - actual);
+            p.Revenue, p.TimesheetMapping, p.TrainingDate, p.StartDate, p.EndDate, budget, adjust, actual, (budget + adjust) - actual);
     }
 
     private static ActionResult? ValidateChoices(ProjectUpsert req, ControllerBase c)
@@ -102,6 +102,7 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
             Revenue = req.Revenue,
             // Default the timesheet mapping to the project code; user can refine it in edit (e.g. "SOJ2510-0033,T10").
             TimesheetMapping = string.IsNullOrWhiteSpace(req.TimesheetMapping) ? req.Code : req.TimesheetMapping.Trim(),
+            TrainingDate = string.IsNullOrWhiteSpace(req.TrainingDate) ? null : req.TrainingDate.Trim(),
             StartDate = req.StartDate,
             EndDate = req.EndDate,
             CreatedAt = DateTime.UtcNow,
@@ -133,6 +134,7 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
         p.Progress = req.Progress;
         p.Revenue = req.Revenue;
         p.TimesheetMapping = string.IsNullOrWhiteSpace(req.TimesheetMapping) ? req.Code : req.TimesheetMapping.Trim();
+        p.TrainingDate = string.IsNullOrWhiteSpace(req.TrainingDate) ? null : req.TrainingDate.Trim();
         p.StartDate = req.StartDate;
         p.EndDate = req.EndDate;
         p.UpdatedAt = DateTime.UtcNow;
