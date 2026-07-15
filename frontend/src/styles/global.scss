@@ -190,6 +190,98 @@ button {
   margin-bottom: var(--space-1);
 }
 
+// Searchable combobox (input + filtered dropdown list) — shared across forms.
+.combo {
+  position: relative;
+  .input { width: 100%; }
+}
+.combo__list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: var(--space-1);
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+
+  li {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    &:hover { background: var(--color-surface-alt, rgba(0, 0, 0, 0.05)); }
+  }
+}
+
+// A status chip = coloured dot + name + count. Outlined when idle, filled when selected.
+// Shared by the Projects list and the Manday-summary filter bars.
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+
+  // Colour comes from the shared badge modifier classes; used here for the dot + active fill.
+  --chip-color: var(--color-text-muted);
+  &.badge--green  { --chip-color: var(--color-success); }
+  &.badge--orange { --chip-color: var(--color-warning); }
+  &.badge--blue   { --chip-color: var(--color-primary); }
+  &.badge--red    { --chip-color: var(--color-danger); }
+  &.badge--purple { --chip-color: var(--color-purple); }
+
+  // Reset the .badge base so it renders as a chip, not a solid badge, when idle.
+  &.badge { display: inline-flex; color: var(--color-text); background: var(--color-surface); }
+
+  &::before {
+    content: '';
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--chip-color);
+    flex: none;
+  }
+
+  &__count {
+    min-width: 1.4em;
+    padding: 0 var(--space-1);
+    border-radius: 999px;
+    background: var(--color-surface-alt, rgba(0, 0, 0, 0.06));
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &:hover { border-color: var(--chip-color); }
+
+  &.is-active,
+  &.badge.is-active {
+    background: var(--chip-color);
+    border-color: var(--chip-color);
+    color: var(--color-primary-contrast);
+
+    &::before { background: var(--color-primary-contrast); }
+    .status-chip__count {
+      background: rgba(255, 255, 255, 0.28);
+      color: var(--color-primary-contrast);
+    }
+  }
+}
+
 .muted { color: var(--color-text-muted); }
 .error-text { color: var(--color-danger); }
 .over-budget { color: var(--color-danger); font-weight: var(--font-weight-bold); }

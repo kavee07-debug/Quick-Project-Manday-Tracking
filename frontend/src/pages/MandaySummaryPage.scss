@@ -3,4 +3,25 @@
   &__hint { margin: 0 0 var(--space-5); font-size: var(--font-size-sm); }
   &__projname { font-weight: var(--font-weight-regular); }
   &__status { margin-left: var(--space-2); }
+
+  // Status/type click-to-toggle filter chips (uses the shared .status-chip).
+  &__filterbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-4);
+  }
+  &__filterbar-label {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    margin-right: var(--space-1);
+  }
+  &__filterbar-sep {
+    width: 1px;
+    align-self: stretch;
+    min-height: 24px;
+    background: var(--color-border);
+    margin: 0 var(--space-2);
+  }
 }

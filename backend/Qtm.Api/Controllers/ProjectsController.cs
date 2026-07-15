@@ -13,7 +13,7 @@ namespace Qtm.Api.Controllers;
 [Authorize]
 public class ProjectsController(QtmDbContext db) : ControllerBase
 {
-    private static readonly string[] ValidTypes = ["Implement", "Customize", "Training", "Other"];
+    private static readonly string[] ValidTypes = ["Implement", "Customize", "Training", "Internal", "Other"];
     private static readonly string[] ValidStatuses = ["Open", "Hold", "Completed", "Cancel"];
 
     // Rolls the per-task view rows up to project level.
@@ -32,7 +32,7 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
     private static ActionResult? ValidateChoices(ProjectUpsert req, ControllerBase c)
     {
         if (!string.IsNullOrWhiteSpace(req.Type) && !ValidTypes.Contains(req.Type))
-            return c.BadRequest(new { message = "Type ต้องเป็น Implement/Customize/Training/Other" });
+            return c.BadRequest(new { message = "Type ต้องเป็น Implement/Customize/Training/Internal/Other" });
         if (!string.IsNullOrWhiteSpace(req.Status) && !ValidStatuses.Contains(req.Status))
             return c.BadRequest(new { message = "Status ต้องเป็น Open/Hold/Completed/Cancel" });
         if (req.Progress is decimal pct && (pct < 0 || pct > 100))

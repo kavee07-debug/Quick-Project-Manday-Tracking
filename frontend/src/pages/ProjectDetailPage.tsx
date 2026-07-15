@@ -28,7 +28,7 @@ export default function ProjectDetailPage() {
   return (
     <div className="detail">
       <div className="detail__breadcrumb muted">
-        <Link to="/projects">โปรเจกต์</Link> / {project.code}
+        <Link to="/projects">Project</Link> / {project.code}
       </div>
       <h1 className="detail__title">
         {project.code} — {project.name}

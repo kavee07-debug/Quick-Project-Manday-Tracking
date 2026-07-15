@@ -12,6 +12,9 @@ USE QtmManday;
 GO
 
 /* ---------- Drop in dependency order (for re-runs) ---------- */
+IF OBJECT_ID(N'dbo.MeetingLine', N'U')  IS NOT NULL DROP TABLE dbo.MeetingLine;   -- FK -> MeetingRecord, Project
+IF OBJECT_ID(N'dbo.MeetingRecord', N'U') IS NOT NULL DROP TABLE dbo.MeetingRecord;
+IF OBJECT_ID(N'dbo.MeetingSetting', N'U') IS NOT NULL DROP TABLE dbo.MeetingSetting;
 IF OBJECT_ID(N'dbo.MandayEntry', N'U')  IS NOT NULL DROP TABLE dbo.MandayEntry;
 IF OBJECT_ID(N'dbo.Task', N'U')         IS NOT NULL DROP TABLE dbo.Task;
 IF OBJECT_ID(N'dbo.Project', N'U')      IS NOT NULL DROP TABLE dbo.Project;   -- FK -> Customer, drop before Customer
@@ -113,7 +116,7 @@ CREATE TABLE dbo.Project (
     Name          NVARCHAR(300) NOT NULL,
     Description   NVARCHAR(MAX) NULL,
     CustomerId    INT NULL,                   -- owning customer (nullable)
-    Type          NVARCHAR(20) NULL,          -- Implement | Customize | Training | Other
+    Type          NVARCHAR(20) NULL,          -- Implement | Customize | Training | Internal | Other
     Status        NVARCHAR(30) NOT NULL CONSTRAINT DF_Project_Status DEFAULT (N'Open'),
     Progress      DECIMAL(5,2) NULL,          -- completion %, e.g. 70.01 (0..100)
     Revenue       DECIMAL(18,2) NULL,         -- project value / revenue
@@ -125,7 +128,7 @@ CREATE TABLE dbo.Project (
     UpdatedAt     DATETIME2(0) NULL,
     CONSTRAINT UQ_Project_Code     UNIQUE (Code),
     CONSTRAINT FK_Project_Customer FOREIGN KEY (CustomerId) REFERENCES dbo.Customer(CustomerId),
-    CONSTRAINT CK_Project_Type     CHECK (Type IS NULL OR Type IN (N'Implement', N'Customize', N'Training', N'Other')),
+    CONSTRAINT CK_Project_Type     CHECK (Type IS NULL OR Type IN (N'Implement', N'Customize', N'Training', N'Internal', N'Other')),
     CONSTRAINT CK_Project_Status   CHECK (Status IN (N'Open', N'Hold', N'Completed', N'Cancel')),
     CONSTRAINT CK_Project_Progress CHECK (Progress IS NULL OR (Progress >= 0 AND Progress <= 100))
 );
@@ -175,6 +178,60 @@ CREATE INDEX IX_Task_ProjectId        ON dbo.Task(ProjectId);
 CREATE INDEX IX_Manday_TaskId         ON dbo.MandayEntry(TaskId);
 CREATE INDEX IX_Manday_Task_Type      ON dbo.MandayEntry(TaskId, EntryType);
 CREATE INDEX IX_Manday_SourceSystemId ON dbo.MandayEntry(SourceSystemId);
+GO
+
+/* ============================================================
+   Meeting Record: weekly project-status meeting (header -> lines)
+   ============================================================ */
+CREATE TABLE dbo.MeetingRecord (
+    MeetingId     INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_MeetingRecord PRIMARY KEY,
+    MeetingDate   DATE NOT NULL,
+    Topic         NVARCHAR(300) NOT NULL,
+    Notes         NVARCHAR(MAX) NULL,
+    Agenda        NVARCHAR(MAX) NULL,             -- one agenda item per line
+    Attendees     NVARCHAR(MAX) NULL,             -- one attendee per line, e.g. "ชื่อ (PM)"
+    PreparedBy    NVARCHAR(200) NULL,             -- ผู้บันทึกการประชุม
+    CertifiedBy   NVARCHAR(200) NULL,             -- ผู้รับรองการประชุม
+    NextMeetingDate DATE NULL,
+    NextMeetingPreparedBy NVARCHAR(200) NULL,
+    OtherTopics   NVARCHAR(MAX) NULL,             -- "สรุปการประชุมอื่นๆ" — one topic per line
+    IsClosed      BIT NOT NULL CONSTRAINT DF_MeetingRecord_IsClosed DEFAULT (0),
+    ClosedAt      DATETIME2(0) NULL,
+    ClosedBy      NVARCHAR(200) NULL,
+    CreatedAt     DATETIME2(0) NOT NULL CONSTRAINT DF_MeetingRecord_CreatedAt DEFAULT (SYSUTCDATETIME()),
+    UpdatedAt     DATETIME2(0) NULL
+);
+GO
+
+CREATE TABLE dbo.MeetingLine (
+    MeetingLineId    INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_MeetingLine PRIMARY KEY,
+    MeetingId        INT NOT NULL,
+    ProjectId        INT NOT NULL,
+    StatusSnapshot   NVARCHAR(30) NULL,          -- project Status frozen at load time
+    ProgressSnapshot DECIMAL(5,2) NULL,          -- project Progress frozen at load time
+    UpdateDetail     NVARCHAR(MAX) NULL,
+    NextAction       NVARCHAR(MAX) NULL,
+    SortOrder        INT NOT NULL CONSTRAINT DF_MeetingLine_SortOrder DEFAULT (0),
+    CreatedAt        DATETIME2(0) NOT NULL CONSTRAINT DF_MeetingLine_CreatedAt DEFAULT (SYSUTCDATETIME()),
+    UpdatedAt        DATETIME2(0) NULL,
+    CONSTRAINT FK_MeetingLine_Meeting FOREIGN KEY (MeetingId) REFERENCES dbo.MeetingRecord(MeetingId) ON DELETE CASCADE,
+    CONSTRAINT FK_MeetingLine_Project FOREIGN KEY (ProjectId) REFERENCES dbo.Project(ProjectId),   -- lookup, no cascade
+    CONSTRAINT UQ_MeetingLine_Meeting_Project UNIQUE (MeetingId, ProjectId)
+);
+GO
+
+CREATE INDEX IX_MeetingLine_MeetingId ON dbo.MeetingLine(MeetingId);
+CREATE INDEX IX_MeetingLine_ProjectId ON dbo.MeetingLine(ProjectId);
+GO
+
+/* Single-row defaults applied when creating a new meeting. */
+CREATE TABLE dbo.MeetingSetting (
+    Id                INT NOT NULL CONSTRAINT PK_MeetingSetting PRIMARY KEY,   -- fixed = 1
+    DefaultAgenda     NVARCHAR(MAX) NULL,
+    DefaultAttendees  NVARCHAR(MAX) NULL,
+    DefaultPreparedBy NVARCHAR(200) NULL,
+    UpdatedAt         DATETIME2(0) NULL
+);
 GO
 
 /* ============================================================

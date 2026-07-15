@@ -1,0 +1,48 @@
+.meeting {
+  &__title { margin: 0; font-size: var(--font-size-xl); }
+  &__hint { margin: 0 0 var(--space-4); font-size: var(--font-size-sm); }
+
+  // Detail toolbar: Load Projects + add-project combobox on the left, Save on the right.
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-4);
+  }
+  &__toolbar-spacer { flex: 1 1 auto; }
+
+  &__addproj { min-width: 320px; max-width: 420px; }
+
+  // Search + type-filter chips row above the lines table.
+  &__filterbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-3);
+  }
+  &__search { max-width: 320px; }
+
+  &__table {
+    th, td { vertical-align: top; }
+    .meeting__projcell { min-width: 220px; }
+  }
+
+  // Read-only note columns: wrap and preserve the line breaks the user typed.
+  &__notecell {
+    white-space: pre-wrap;
+    max-width: 320px;
+    font-size: var(--font-size-sm);
+  }
+
+  // Large textareas in the per-line edit popup.
+  &__editbox {
+    resize: vertical;
+    min-height: 8rem;
+    margin-bottom: var(--space-3);
+  }
+}
+
+// Widen the modal when it hosts the big Update Detail / Next Action editor.
+.modal:has(.meeting__editbox) { max-width: 640px; }

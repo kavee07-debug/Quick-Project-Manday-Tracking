@@ -7,6 +7,9 @@ import ProjectListPage from './pages/ProjectListPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import MandaySummaryPage from './pages/MandaySummaryPage';
 import ResourceMandaySummaryPage from './pages/ResourceMandaySummaryPage';
+import MeetingListPage from './pages/MeetingListPage';
+import MeetingDetailPage from './pages/MeetingDetailPage';
+import MeetingPrintPage from './pages/MeetingPrintPage';
 import ResourcePage from './pages/ResourcePage';
 import CustomersPage from './pages/CustomersPage';
 import MasterItemsPage from './pages/MasterItemsPage';
@@ -27,6 +30,10 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route
+        path="/meeting-record/:id/print"
+        element={<RequireAuth><MeetingPrintPage /></RequireAuth>}
+      />
+      <Route
         element={
           <RequireAuth>
             <AppLayout />
@@ -37,6 +44,8 @@ export default function App() {
         <Route path="/projects/:id" element={<ProjectDetailPage />} />
         <Route path="/manday-summary" element={<MandaySummaryPage />} />
         <Route path="/resource-manday-summary" element={<ResourceMandaySummaryPage />} />
+        <Route path="/meeting-record" element={<MeetingListPage />} />
+        <Route path="/meeting-record/:id" element={<MeetingDetailPage />} />
         <Route path="/resources" element={<ResourcePage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/master-items" element={<MasterItemsPage />} />

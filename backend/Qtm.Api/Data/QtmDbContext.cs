@@ -34,6 +34,9 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
     public DbSet<D365TaskStaging> D365TaskStagings => Set<D365TaskStaging>();
     public DbSet<D365TimesheetStaging> D365TimesheetStagings => Set<D365TimesheetStaging>();
     public DbSet<D365SyncLog> D365SyncLogs => Set<D365SyncLog>();
+    public DbSet<MeetingRecord> Meetings => Set<MeetingRecord>();
+    public DbSet<MeetingLine> MeetingLines => Set<MeetingLine>();
+    public DbSet<MeetingSetting> MeetingSettings => Set<MeetingSetting>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -223,6 +226,41 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.Property(x => x.EntityName).HasMaxLength(100);
             e.Property(x => x.Direction).HasMaxLength(10);
             e.Property(x => x.Status).HasMaxLength(20);
+        });
+
+        b.Entity<MeetingRecord>(e =>
+        {
+            e.ToTable("MeetingRecord");
+            e.HasKey(x => x.MeetingId);
+            e.Property(x => x.Topic).HasMaxLength(300);
+            e.Property(x => x.PreparedBy).HasMaxLength(200);
+            e.Property(x => x.CertifiedBy).HasMaxLength(200);
+            e.Property(x => x.NextMeetingPreparedBy).HasMaxLength(200);
+            e.Property(x => x.ClosedBy).HasMaxLength(200);
+        });
+
+        b.Entity<MeetingLine>(e =>
+        {
+            e.ToTable("MeetingLine");
+            e.HasKey(x => x.MeetingLineId);
+            e.Property(x => x.StatusSnapshot).HasMaxLength(30);
+            e.Property(x => x.ProgressSnapshot).HasColumnType("decimal(5,2)");
+            e.HasIndex(x => new { x.MeetingId, x.ProjectId }).IsUnique();
+            e.HasOne(x => x.Meeting)
+                .WithMany(m => m.Lines)
+                .HasForeignKey(x => x.MeetingId);
+            e.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);   // lookup FK — must not cascade (schema has no cascade here)
+        });
+
+        b.Entity<MeetingSetting>(e =>
+        {
+            e.ToTable("MeetingSetting");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.DefaultPreparedBy).HasMaxLength(200);
         });
     }
 }

@@ -307,11 +307,13 @@ public class D365JobService(QtmDbContext db, D365BcClient client)
     }
 
     // Best-effort guess of Project.Type from the job/project name. Returns a value from
-    // {Implement, Customize, Training, Other}; the user refines it before promoting.
+    // {Implement, Customize, Training, Internal, Other}; the user refines it before promoting.
     public static string? SuggestType(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
         var n = name.ToLowerInvariant();
+        if (n.Contains("internal") || n.Contains("ภายใน"))
+            return "Internal";
         if (n.Contains("train") || n.Contains("workshop") || n.Contains("อบรม") || n.Contains("เทรน"))
             return "Training";
         if (n.Contains("customize") || n.Contains("custom ") || n.Contains("interface")

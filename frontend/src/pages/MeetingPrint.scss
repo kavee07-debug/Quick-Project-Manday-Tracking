@@ -1,0 +1,112 @@
+// Standalone print view for the Meeting "Minute of Meeting" report.
+// Renders full-screen (no app chrome); the .no-print toolbar is hidden when printing.
+.mprint {
+  background: #fff;
+  color: #111;
+  min-height: 100vh;
+
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+    position: sticky;
+    top: 0;
+    background: #fff;
+  }
+  &__toolbar-spacer { flex: 1 1 auto; }
+
+  &__page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: var(--space-6) var(--space-6) var(--space-8);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  // Single document table; <thead> repeats on every printed page.
+  &__doc {
+    width: 100%;
+    border-collapse: collapse;
+    > thead { display: table-header-group; }   // repeat header per page when printing
+    > thead > tr > td,
+    > tbody > tr > td { padding: 0; }
+  }
+
+  // Running header (logo + title), lives in <thead> so it prints on every page.
+  &__runhead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    border-bottom: 2px solid #111;
+    padding-bottom: var(--space-2);
+    margin-bottom: var(--space-4);
+  }
+  &__logo { height: 34px; }
+  &__title { margin: 0; font-size: 22px; font-weight: 700; flex: 1 1 auto; }
+
+  &__meta {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: var(--space-5);
+    th, td { text-align: left; vertical-align: top; padding: 4px 8px; border-bottom: 1px solid #eee; }
+    th { width: 190px; font-weight: 600; color: #333; white-space: nowrap; }
+  }
+  &__ol, &__ul { margin: 0; padding-left: 1.2em; }
+
+  &__h2 {
+    font-size: 17px;
+    margin: 0 0 var(--space-3);
+    padding-bottom: 4px;
+    border-bottom: 1px solid #ccc;
+  }
+
+  &__group { margin-bottom: var(--space-4); break-inside: avoid; }
+  &__customer {
+    font-size: 15px;
+    font-weight: 700;
+    background: #f0f2f7;
+    padding: 4px 8px;
+    margin: 0 0 var(--space-2);
+  }
+
+  &__proj {
+    padding: 6px 8px 8px;
+    border-left: 3px solid #c9d2e6;
+    margin: 0 0 var(--space-3) var(--space-2);
+    break-inside: avoid;
+  }
+  &__projname { font-size: 14px; margin-bottom: 4px; }
+  &__field { margin-bottom: 3px; }
+  &__label { font-weight: 600; color: #333; }
+  &__text { white-space: pre-wrap; margin-left: var(--space-2); }
+
+  // Closing section (other topics + disclaimer + signatures) — its own last page.
+  &__footer { padding-top: var(--space-4); }
+  &__note { margin: var(--space-5) 0; }
+  &__note::first-letter { color: #d83a3a; }
+  &__signs {
+    display: flex;
+    justify-content: space-around;
+    gap: var(--space-6);
+    margin-top: var(--space-8);
+    text-align: center;
+    break-inside: avoid;
+  }
+  &__sign { flex: 1; }
+  &__signrole { margin-bottom: 48px; }   // space for a handwritten signature
+  &__signline { margin-bottom: 4px; }
+  &__signname { font-weight: 600; }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  .mprint__page { max-width: none; padding: 0; }
+  @page { margin: 14mm; }
+
+  // Project status begins on a fresh page (page 2); meeting info fills page 1.
+  .mprint__projwrap { break-before: page; page-break-before: always; }
+  // Closing section on its own final page.
+  .mprint__footer { break-before: page; page-break-before: always; }
+}

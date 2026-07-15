@@ -18,11 +18,25 @@ public class ResourceMandaySummaryController(QtmDbContext db) : ControllerBase
 {
     private const string Unassigned = "ไม่ระบุ";
 
+    private static HashSet<string> ParseCsv(string? csv) =>
+        string.IsNullOrWhiteSpace(csv)
+            ? []
+            : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
+
+    /// <param name="statuses">Optional CSV of project statuses to include (e.g. "Open,Hold"); empty = all.</param>
+    /// <param name="types">Optional CSV of project types to include (e.g. "Implement,Internal"); empty = all.</param>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<ResourceMandaySummaryRow>>> Get()
+    public async Task<ActionResult<IEnumerable<ResourceMandaySummaryRow>>> Get(
+        [FromQuery] string? statuses = null, [FromQuery] string? types = null)
     {
-        var raw = await (
+        var statusSet = ParseCsv(statuses);
+        var typeSet = ParseCsv(types);
+
+        // Join through Task→Project so manday can be filtered by the owning project's status/type.
+        var query =
             from m in db.MandayEntries
+            join t in db.Tasks on m.TaskId equals t.TaskId
+            join p in db.Projects on t.ProjectId equals p.ProjectId
             join r in db.Resources on m.ResourceId equals r.ResourceId into rj
             from r in rj.DefaultIfEmpty()
             select new
@@ -31,9 +45,16 @@ public class ResourceMandaySummaryController(QtmDbContext db) : ControllerBase
                 Code = r != null ? r.Code : null,
                 Name = r != null ? r.Name : null,
                 Position = r != null ? r.Position : null,
+                ProjectStatus = p.Status,
+                ProjectType = p.Type,
                 m.EntryType,
                 m.Manday,
-            }).ToListAsync();
+            };
+
+        if (statusSet.Count > 0) query = query.Where(x => statusSet.Contains(x.ProjectStatus));
+        if (typeSet.Count > 0) query = query.Where(x => x.ProjectType != null && typeSet.Contains(x.ProjectType));
+
+        var raw = await query.ToListAsync();
 
         var rows = raw
             .GroupBy(x => x.ResId)

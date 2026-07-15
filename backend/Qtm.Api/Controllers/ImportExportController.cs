@@ -20,7 +20,7 @@ namespace Qtm.Api.Controllers;
 public class ImportExportController(QtmDbContext db, ExcelService excel) : ControllerBase
 {
     private static readonly string[] ValidTypes = ["Budget", "Actual", "Adjust"];
-    private static readonly string[] ValidProjectTypes = ["Implement", "Customize", "Training", "Other"];
+    private static readonly string[] ValidProjectTypes = ["Implement", "Customize", "Training", "Internal", "Other"];
     private static readonly string[] ValidProjectStatuses = ["Open", "Hold", "Completed", "Cancel"];
 
     private FileContentResult Xlsx(byte[] bytes, string name) =>
@@ -69,7 +69,7 @@ public class ImportExportController(QtmDbContext db, ExcelService excel) : Contr
             var type = string.IsNullOrWhiteSpace(row.Type) ? null : row.Type;
             if (type is not null && !ValidProjectTypes.Contains(type))
             {
-                errors.Add($"แถว {line}: Type ต้องเป็น Implement/Customize/Training/Other (พบ '{row.Type}')");
+                errors.Add($"แถว {line}: Type ต้องเป็น Implement/Customize/Training/Internal/Other (พบ '{row.Type}')");
                 skipped++;
                 continue;
             }

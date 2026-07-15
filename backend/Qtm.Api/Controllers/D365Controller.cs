@@ -18,7 +18,7 @@ namespace Qtm.Api.Controllers;
 [Authorize(Roles = Roles.Admin)]
 public class D365Controller(QtmDbContext db, D365BcClient client, D365JobService jobs) : ControllerBase
 {
-    private static readonly string[] ValidTypes = ["Implement", "Customize", "Training", "Other"];
+    private static readonly string[] ValidTypes = ["Implement", "Customize", "Training", "Internal", "Other"];
 
     // Normalises a Type: blank -> null; invalid -> null (so it never violates CK_Project_Type).
     private static string? NormalizeType(string? type) =>

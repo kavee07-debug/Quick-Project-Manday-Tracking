@@ -8,7 +8,7 @@ public class Project
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public int? CustomerId { get; set; }                   // owning customer (nullable)
-    public string? Type { get; set; }                      // Implement | Customize | Training | Other
+    public string? Type { get; set; }                      // Implement | Customize | Training | Internal | Other
     public string Status { get; set; } = "Open";           // Open | Hold | Completed | Cancel
     public decimal? Progress { get; set; }                 // completion %, e.g. 70.01 (0..100)
     public decimal? Revenue { get; set; }                  // project value / revenue

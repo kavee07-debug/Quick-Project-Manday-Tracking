@@ -19,7 +19,7 @@ export interface User {
 }
 export type UserUpsert = Pick<User, 'email' | 'displayName' | 'isActive' | 'roles'>;
 
-export const PROJECT_TYPES = ['Implement', 'Customize', 'Training', 'Other'] as const;
+export const PROJECT_TYPES = ['Implement', 'Customize', 'Training', 'Internal', 'Other'] as const;
 export const PROJECT_STATUSES = ['Open', 'Hold', 'Completed', 'Cancel'] as const;
 
 export interface Customer {
@@ -98,6 +98,56 @@ export type MandayUpsert = Pick<
   MandayEntry,
   'entryType' | 'resourceId' | 'manday' | 'entryDate' | 'startDate' | 'endDate' | 'note'
 >;
+
+// ---- Meeting Record (weekly project-status meeting) ----
+export interface MeetingRecord {
+  meetingId: number;
+  meetingDate: string;   // yyyy-MM-dd
+  topic: string;
+  notes?: string | null;
+  agenda?: string | null;              // one item per line
+  attendees?: string | null;           // one per line, e.g. "ชื่อ (PM)"
+  preparedBy?: string | null;          // ผู้บันทึกการประชุม
+  certifiedBy?: string | null;         // ผู้รับรองการประชุม
+  nextMeetingDate?: string | null;     // yyyy-MM-dd
+  nextMeetingPreparedBy?: string | null;
+  otherTopics?: string | null;         // "สรุปการประชุมอื่นๆ" — one topic per line
+  isClosed: boolean;
+  closedAt?: string | null;
+  closedBy?: string | null;
+  lineCount: number;     // read-only
+  createdAt: string;
+}
+export type MeetingRecordUpsert = Pick<
+  MeetingRecord,
+  'meetingDate' | 'topic' | 'notes' | 'agenda' | 'attendees' | 'preparedBy' | 'certifiedBy'
+  | 'nextMeetingDate' | 'nextMeetingPreparedBy' | 'otherTopics'
+>;
+
+export interface MeetingLine {
+  meetingLineId: number;
+  meetingId: number;
+  projectId: number;
+  projectCode: string;      // read-only (joined from Project)
+  projectName: string;      // read-only (joined from Project)
+  projectType?: string | null;
+  customerCode?: string | null;   // read-only (joined from Project → Customer)
+  customerName?: string | null;
+  statusSnapshot?: string | null;
+  progressSnapshot?: number | null;
+  updateDetail?: string | null;
+  nextAction?: string | null;
+  sortOrder: number;
+}
+// Batch inline-save payload for a line's editable fields.
+export type MeetingLineEdit = Pick<MeetingLine, 'meetingLineId' | 'updateDetail' | 'nextAction' | 'sortOrder'>;
+
+// Defaults prefilled into a new meeting (managed on the list page's "ตั้งค่า Default").
+export interface MeetingSetting {
+  defaultAgenda?: string | null;
+  defaultAttendees?: string | null;
+  defaultPreparedBy?: string | null;
+}
 
 export const RESOURCE_POSITIONS = ['Dev', 'SA', 'PM'] as const;
 

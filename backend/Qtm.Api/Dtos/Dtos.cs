@@ -29,6 +29,23 @@ public record MandayEntryDto(int MandayEntryId, int TaskId, string EntryType, in
 public record MandayUpsert(string EntryType, int? ResourceId, decimal Manday, DateOnly? EntryDate,
     DateOnly? StartDate, DateOnly? EndDate, string? Note);
 
+// ---- Meeting Record (weekly project-status meeting) ----
+public record MeetingRecordDto(int MeetingId, DateOnly MeetingDate, string Topic, string? Notes,
+    string? Agenda, string? Attendees, string? PreparedBy, string? CertifiedBy,
+    DateOnly? NextMeetingDate, string? NextMeetingPreparedBy, string? OtherTopics,
+    bool IsClosed, DateTime? ClosedAt, string? ClosedBy,
+    int LineCount, DateTime CreatedAt);
+public record MeetingRecordUpsert(DateOnly MeetingDate, string Topic, string? Notes,
+    string? Agenda, string? Attendees, string? PreparedBy, string? CertifiedBy,
+    DateOnly? NextMeetingDate, string? NextMeetingPreparedBy, string? OtherTopics);
+public record MeetingLineDto(int MeetingLineId, int MeetingId, int ProjectId,
+    string ProjectCode, string ProjectName, string? ProjectType, string? CustomerCode, string? CustomerName,
+    string? StatusSnapshot, decimal? ProgressSnapshot, string? UpdateDetail, string? NextAction, int SortOrder);
+public record MeetingLineAdd(int ProjectId);
+public record MeetingLoadProjects(string[]? Statuses);
+public record MeetingLineEdit(int MeetingLineId, string? UpdateDetail, string? NextAction, int SortOrder);
+public record MeetingSettingDto(string? DefaultAgenda, string? DefaultAttendees, string? DefaultPreparedBy);
+
 // ---- User management (Admin) ----
 public record UserDto(int UserId, string Email, string DisplayName, bool IsActive, string[] Roles);
 public record UserUpsert(string Email, string DisplayName, bool IsActive, string[] Roles);
