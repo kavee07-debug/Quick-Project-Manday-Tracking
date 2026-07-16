@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { BoxIcon, ChartIcon, ClockIcon, GearIcon, GridIcon, LogoutIcon, MenuIcon, PeopleIcon, PlugIcon, UserIcon } from './icons';
+import { BoxIcon, BuildingIcon, ChartIcon, ClockIcon, GearIcon, GridIcon, LogoutIcon, MenuIcon, PeopleIcon, PlugIcon, UserIcon } from './icons';
 import './AppLayout.scss';
 
 const SIDEBAR_KEY = 'qtm.sidebar';
@@ -80,7 +80,7 @@ export function AppLayout() {
           )}
           {hasRole('Admin', 'ProjectManager') && (
             <NavLink to="/customers" className={navItem} title="Master Customer">
-              <PeopleIcon size={20} /> <span className="sidebar__label">Master Customer</span>
+              <BuildingIcon size={20} /> <span className="sidebar__label">Master Customer</span>
             </NavLink>
           )}
           {hasRole('Admin', 'ProjectManager') && (

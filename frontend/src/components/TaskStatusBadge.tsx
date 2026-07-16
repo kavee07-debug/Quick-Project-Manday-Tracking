@@ -1,8 +1,8 @@
-// Task status badge: Open = blue, InProgress = orange, Done = green.
+// Task status badge: Open = green, InProgress = orange, Done = blue.
 const CLASS: Record<string, string> = {
-  Open: 'badge--blue',
+  Open: 'badge--green',
   InProgress: 'badge--orange',
-  Done: 'badge--green',
+  Done: 'badge--blue',
 };
 
 export function TaskStatusBadge({ status }: { status: string }) {

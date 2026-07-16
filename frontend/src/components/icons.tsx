@@ -32,6 +32,9 @@ export const GridIcon = ({ size }: P) => (
 export const PeopleIcon = ({ size }: P) => (
   <svg {...base(size)}><circle cx="9" cy="8" r="3.2" /><path d="M3 20c0-3 2.7-5 6-5s6 2 6 5" /><path d="M16 5.2A3.2 3.2 0 0 1 16 11" /><path d="M18 15c2.2.5 3.8 2.1 3.8 4.4" /></svg>
 );
+export const BuildingIcon = ({ size }: P) => (
+  <svg {...base(size)}><path d="M3 21h18" /><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16" /><path d="M9 7h1" /><path d="M14 7h1" /><path d="M9 11h1" /><path d="M14 11h1" /><path d="M10 21v-3a2 2 0 0 1 4 0v3" /></svg>
+);
 export const ChartIcon = ({ size }: P) => (
   <svg {...base(size)}><path d="M3 3v18h18" /><rect x="7" y="11" width="3" height="6" rx="0.5" /><rect x="12" y="7" width="3" height="10" rx="0.5" /><rect x="17" y="13" width="3" height="4" rx="0.5" /></svg>
 );

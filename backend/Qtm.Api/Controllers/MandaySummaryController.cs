@@ -18,9 +18,19 @@ public class MandaySummaryController(QtmDbContext db) : ControllerBase
 {
     private const string Unassigned = "ไม่ระบุ";
 
+    private static HashSet<string> ParseCsv(string? csv) =>
+        string.IsNullOrWhiteSpace(csv)
+            ? []
+            : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
+
+    /// <param name="statuses">Optional CSV of project statuses to include (e.g. "Open,Hold"); empty = all.</param>
+    /// <param name="types">Optional CSV of project types to include (e.g. "Implement,Internal"); empty = all.</param>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<MandaySummaryRow>>> Get()
+    public async Task<ActionResult<IEnumerable<MandaySummaryRow>>> Get(
+        [FromQuery] string? statuses = null, [FromQuery] string? types = null)
     {
+        var statusSet = ParseCsv(statuses);
+        var typeSet = ParseCsv(types);
         // Left-join resource so manday rows with null ResourceId are kept.
         var raw = await (
             from m in db.MandayEntries
@@ -48,7 +58,10 @@ public class MandaySummaryController(QtmDbContext db) : ControllerBase
                       })
                       .ToArray());
 
-        var projects = await db.Projects.OrderBy(p => p.Code).ToListAsync();
+        var projQuery = db.Projects.AsQueryable();
+        if (statusSet.Count > 0) projQuery = projQuery.Where(p => statusSet.Contains(p.Status));
+        if (typeSet.Count > 0) projQuery = projQuery.Where(p => p.Type != null && typeSet.Contains(p.Type));
+        var projects = await projQuery.OrderBy(p => p.Code).ToListAsync();
         var rows = projects.Select(p => new MandaySummaryRow(
             p.ProjectId, p.Code, p.Name, p.Status,
             byProject.TryGetValue(p.ProjectId, out var cells) ? cells : []));
