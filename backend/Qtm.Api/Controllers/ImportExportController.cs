@@ -310,7 +310,8 @@ public class ImportExportController(QtmDbContext db, ExcelService excel) : Contr
                 db.Tasks.Add(new TaskItem
                 {
                     ProjectId = project.ProjectId, Name = row.TaskName, Description = row.Description,
-                    Status = row.Status, SortOrder = row.SortOrder, CreatedAt = DateTime.UtcNow,
+                    Status = Qtm.Api.Services.TaskRules.ResolveStatus(row.Description, row.Status),
+                    SortOrder = row.SortOrder, CreatedAt = DateTime.UtcNow,
                 });
                 created++;
             }

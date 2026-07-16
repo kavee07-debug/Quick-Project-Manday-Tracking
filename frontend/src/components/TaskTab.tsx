@@ -4,6 +4,7 @@ import type { TaskItem, TaskUpsert } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from './Modal';
 import { ImportExportBar } from './ImportExportBar';
+import { TaskStatusBadge } from './TaskStatusBadge';
 
 const empty: TaskUpsert = { name: '', description: '', status: 'Open', sortOrder: 0 };
 
@@ -108,7 +109,7 @@ export function TaskTab({ projectId }: { projectId: number }) {
                   <td className="muted">{t.description || '—'}</td>
                   <td>{t.itemCategoryCode ?? '—'}</td>
                   <td className="num">{t.revenue != null ? t.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}</td>
-                  <td>{t.status}</td>
+                  <td><TaskStatusBadge status={t.status} /></td>
                   <td className="num">
                     {isManager && (
                       <span style={{ display: 'inline-flex', gap: 'var(--space-2)' }}>

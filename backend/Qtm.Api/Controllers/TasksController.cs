@@ -50,7 +50,7 @@ public class TasksController(QtmDbContext db) : ControllerBase
             ProjectId = projectId,
             Name = req.Name,
             Description = req.Description,
-            Status = string.IsNullOrWhiteSpace(req.Status) ? "Open" : req.Status,
+            Status = Qtm.Api.Services.TaskRules.ResolveStatus(req.Description, req.Status),
             SortOrder = req.SortOrder,
             CreatedAt = DateTime.UtcNow,
         };

@@ -245,7 +245,7 @@ public class D365Controller(QtmDbContext db, D365BcClient client, D365JobService
                     Description = st.TaskDescription,
                     ItemCategoryCode = st.ItemCategoryCode,
                     Revenue = st.Revenue,
-                    Status = "Open",
+                    Status = Qtm.Api.Services.TaskRules.ResolveStatus(st.TaskDescription, null),
                     SortOrder = st.SortOrder,
                     CreatedAt = DateTime.UtcNow,
                 };
@@ -343,7 +343,7 @@ public class D365Controller(QtmDbContext db, D365BcClient client, D365JobService
                 Description = t.TaskDescription,
                 ItemCategoryCode = t.ItemCategoryCode,
                 Revenue = t.Revenue,
-                Status = "Open",
+                Status = Qtm.Api.Services.TaskRules.ResolveStatus(t.TaskDescription, null),
                 SortOrder = t.SortOrder,
                 CreatedAt = DateTime.UtcNow,
             });

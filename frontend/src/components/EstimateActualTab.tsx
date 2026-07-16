@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Modal } from './Modal';
 import { ImportExportBar } from './ImportExportBar';
 import { PositionBadge } from './PositionBadge';
+import { TaskStatusBadge } from './TaskStatusBadge';
 import './EstimateActualTab.scss';
 
 const ALL_TYPES: EntryType[] = ['Budget', 'Actual', 'Adjust'];
@@ -197,6 +198,7 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue }:
               <div>
                 <h3 className="ea__task-name">
                   {task.name}
+                  <span style={{ marginLeft: 'var(--space-2)' }}><TaskStatusBadge status={task.status} /></span>
                   {task.revenue != null && (
                     <span className="ea__task-revenue">Revenue {money(task.revenue)}</span>
                   )}
@@ -210,9 +212,11 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue }:
                 )}
               </div>
               {canRecordActual && (
-                <button className="btn btn--sm btn--primary" onClick={() => openAdd(task.taskId)}>
-                  + เพิ่ม Manday
-                </button>
+                task.status === 'Done'
+                  ? <span className="muted">Task เสร็จแล้ว — เพิ่มรายการไม่ได้</span>
+                  : <button className="btn btn--sm btn--primary" onClick={() => openAdd(task.taskId)}>
+                      + เพิ่ม Manday
+                    </button>
               )}
             </div>
 
