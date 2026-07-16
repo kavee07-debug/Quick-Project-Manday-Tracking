@@ -9,6 +9,16 @@ const NO_CUSTOMER = 'ไม่ระบุลูกค้า';
 // Split a multiline textarea field into trimmed non-empty lines.
 const lines = (s?: string | null) => (s ?? '').split('\n').map((x) => x.trim()).filter(Boolean);
 
+// "Other topics" are a JSON array of (possibly multi-line) strings; fall back to newline-separated.
+function parseTopics(s?: string | null): string[] {
+  if (!s) return [];
+  const t = s.trim();
+  if (t.startsWith('[')) {
+    try { const a = JSON.parse(t); if (Array.isArray(a)) return a.map((x) => String(x)); } catch { /* fall through */ }
+  }
+  return lines(s);
+}
+
 // Suggested download filename, e.g. "[Internal]-Weekly-Project-Status-20260715"
 // (Chrome/Edge use document.title as the default "Save as PDF" filename).
 function buildFileName(m: MeetingRecord) {
@@ -68,6 +78,7 @@ export default function MeetingPrintPage() {
 
   const agenda = lines(meeting.agenda);
   const attendees = lines(meeting.attendees);
+  const otherTopics = parseTopics(meeting.otherTopics);
 
   return (
     <div className="mprint">
@@ -141,8 +152,8 @@ export default function MeetingPrintPage() {
               {/* Last page: other topics + disclaimer + signatures */}
               <div className="mprint__footer">
                 <h2 className="mprint__h2">สรุปการประชุมอื่นๆ (Internal)</h2>
-                {meeting.otherTopics
-                  ? <div className="mprint__text">{meeting.otherTopics}</div>
+                {otherTopics.length > 0
+                  ? <ol className="mprint__ol">{otherTopics.map((t, i) => <li key={i}><div className="mprint__text">{t}</div></li>)}</ol>
                   : <p className="muted">—</p>}
 
                 <p className="mprint__note">

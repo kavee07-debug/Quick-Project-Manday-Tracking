@@ -33,6 +33,21 @@ const TYPE_CHIP: Record<string, string> = {
   Implement: 'badge--blue', Customize: 'badge--orange', Training: 'badge--purple', Internal: '', Other: '',
 };
 
+// "Other topics" are stored in MeetingRecord.otherTopics as a JSON array of strings
+// (each item may be multi-line). Legacy value was newline-separated — fall back to that.
+function parseTopics(s?: string | null): string[] {
+  if (!s) return [];
+  const t = s.trim();
+  if (t.startsWith('[')) {
+    try { const a = JSON.parse(t); if (Array.isArray(a)) return a.map((x) => String(x)); } catch { /* fall through */ }
+  }
+  return s.split('\n').map((x) => x.trim()).filter(Boolean);
+}
+function serializeTopics(items: string[]): string | null {
+  const clean = items.map((x) => x.trim()).filter(Boolean);
+  return clean.length ? JSON.stringify(clean) : null;
+}
+
 function lineSortValue(l: MeetingLine, key: SortKey): string | number | null {
   switch (key) {
     case 'project': return l.projectCode;
@@ -77,9 +92,10 @@ export default function MeetingDetailPage() {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
 
-  // "สรุปการประชุมอื่นๆ" — free-text, edited via popup (like the per-line Update Detail)
+  // "สรุปการประชุมอื่นๆ" — a separate table of topics; each row edited via a big-textarea popup.
   const [showOtherEdit, setShowOtherEdit] = useState(false);
-  const [otherForm, setOtherForm] = useState('');
+  const [editTopicIndex, setEditTopicIndex] = useState(-1);   // -1 = adding a new row
+  const [topicForm, setTopicForm] = useState('');
   const [otherErr, setOtherErr] = useState<string | null>(null);
 
   const loadLines = useCallback(async () => {
@@ -107,6 +123,7 @@ export default function MeetingDetailPage() {
   if (!meeting) return <p className="muted">กำลังโหลด…</p>;
 
   const closed = meeting.isClosed;
+  const topics = parseTopics(meeting.otherTopics);   // "สรุปการประชุมอื่นๆ" rows
 
   // Projects not yet on this meeting, filtered by the combobox query (capped for perf).
   const addedIds = new Set(lines.map((l) => l.projectId));
@@ -154,24 +171,50 @@ export default function MeetingDetailPage() {
     setShowEdit(true);
   }
 
-  function openOtherEdit() {
-    setOtherForm(meeting!.otherTopics ?? '');
+  function openTopicAdd() {
+    setEditTopicIndex(-1);
+    setTopicForm('');
+    setOtherErr(null);
+    setShowOtherEdit(true);
+  }
+  function openTopicEdit(index: number, current: string) {
+    setEditTopicIndex(index);
+    setTopicForm(current);
     setOtherErr(null);
     setShowOtherEdit(true);
   }
 
-  // Save the free-text "other topics" back onto the meeting header.
-  async function submitOtherEdit(e: FormEvent) {
+  // Persist the topics array back onto the meeting header (as JSON in otherTopics).
+  async function saveTopics(items: string[]) {
+    const payload = { ...toUpsert(meeting!), otherTopics: serializeTopics(items) };
+    const updated = await api.put<MeetingRecord>(`/meetings/${meetingId}`, payload);
+    setMeeting(updated);
+  }
+
+  async function submitTopic(e: FormEvent) {
     e.preventDefault();
     if (!meeting) return;
     setOtherErr(null);
+    if (topicForm.trim() === '') { setOtherErr('กรุณากรอกข้อมูล'); return; }
+    const items = parseTopics(meeting.otherTopics);
+    const next = editTopicIndex < 0
+      ? [...items, topicForm]
+      : items.map((t, i) => (i === editTopicIndex ? topicForm : t));
     try {
-      const payload = { ...toUpsert(meeting), otherTopics: otherForm.trim() === '' ? null : otherForm };
-      const updated = await api.put<MeetingRecord>(`/meetings/${meetingId}`, payload);
-      setMeeting(updated);
+      await saveTopics(next);
       setShowOtherEdit(false);
     } catch (err) {
       setOtherErr(err instanceof ApiError ? err.message : 'บันทึกไม่สำเร็จ');
+    }
+  }
+
+  async function removeTopic(index: number) {
+    if (!meeting || !confirm('ลบหัวข้อนี้?')) return;
+    const next = parseTopics(meeting.otherTopics).filter((_, i) => i !== index);
+    try {
+      await saveTopics(next);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : 'ลบไม่สำเร็จ');
     }
   }
 
@@ -419,13 +462,41 @@ export default function MeetingDetailPage() {
         </table>
       </div>
 
-      {/* สรุปการประชุมอื่นๆ (Internal) — free-text, edited via popup */}
+      {/* สรุปการประชุมอื่นๆ (Internal) — a separate table; each row is a multi-line topic */}
       <div className="section-head" style={{ marginTop: 'var(--space-5)' }}>
         <h2 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>สรุปการประชุมอื่นๆ (Internal)</h2>
-        {!closed && <button className="btn btn--sm" onClick={openOtherEdit}>edit</button>}
+        {!closed && <button className="btn btn--sm btn--primary" onClick={openTopicAdd}>+ เพิ่ม line</button>}
       </div>
-      <div className="card meeting__notecell" style={{ padding: 'var(--space-4)', maxWidth: 'none' }}>
-        {meeting.otherTopics ? meeting.otherTopics : <span className="muted">— ไม่มีหัวข้ออื่นๆ —</span>}
+      <div className="card">
+        <table className="table meeting__table">
+          <thead>
+            <tr>
+              <th style={{ width: '3em' }}>ลำดับ</th>
+              <th>เรื่อง</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {topics.length === 0 ? (
+              <tr><td colSpan={3} className="muted">ยังไม่มีหัวข้อ — กด "+ เพิ่ม line"</td></tr>
+            ) : (
+              topics.map((t, i) => (
+                <tr key={i}>
+                  <td className="num">{i + 1}</td>
+                  <td className="meeting__notecell">{t}</td>
+                  <td className="num nowrap">
+                    {!closed && (
+                      <span style={{ display: 'inline-flex', gap: 'var(--space-2)' }}>
+                        <button className="btn btn--sm" onClick={() => openTopicEdit(i, t)}>edit</button>
+                        <button className="btn btn--sm btn--danger" onClick={() => removeTopic(i)}>ลบ</button>
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
 
       {showEdit && (
@@ -443,12 +514,12 @@ export default function MeetingDetailPage() {
       )}
 
       {showOtherEdit && (
-        <Modal title="สรุปการประชุมอื่นๆ (Internal)" onClose={() => setShowOtherEdit(false)}>
-          <form onSubmit={submitOtherEdit}>
+        <Modal title={editTopicIndex < 0 ? 'เพิ่มหัวข้อ' : `แก้ไขหัวข้อ #${editTopicIndex + 1}`} onClose={() => setShowOtherEdit(false)}>
+          <form onSubmit={submitTopic}>
             <label className="field-label">รายละเอียด (พิมพ์ยาว / ขึ้นบรรทัดใหม่ได้)</label>
             <textarea className="input meeting__editbox" rows={12} autoFocus
-              value={otherForm}
-              onChange={(e) => setOtherForm(e.target.value)} />
+              value={topicForm}
+              onChange={(e) => setTopicForm(e.target.value)} />
 
             {otherErr && <p className="error-text">{otherErr}</p>}
             <div className="form-actions">
