@@ -12,11 +12,12 @@ namespace Qtm.Api.Controllers;
 /// <summary>
 /// Meeting Record — weekly project-status meetings. A meeting header (date + topic) with
 /// one line per project, capturing an Update Detail / Next Action and a status snapshot.
-/// Accessible to Admin + ProjectManager. A closed meeting is locked from edits until reopened.
+/// Accessible to any authenticated user (Admin/ProjectManager/User can create & edit).
+/// Close/Reopen are restricted to Managers. A closed meeting is locked from edits until reopened.
 /// </summary>
 [ApiController]
 [Route("api/v1")]
-[Authorize(Roles = Roles.Managers)]
+[Authorize]
 public class MeetingsController(QtmDbContext db) : ControllerBase
 {
     private static readonly string[] DefaultLoadStatuses = ["Open", "Hold"];
@@ -126,6 +127,7 @@ public class MeetingsController(QtmDbContext db) : ControllerBase
 
     /// <summary>Lock the meeting from further edits (Admin + PM).</summary>
     [HttpPost("meetings/{id:int}/close")]
+    [Authorize(Roles = Roles.Managers)]
     public async Task<ActionResult<MeetingRecordDto>> Close(int id)
     {
         var m = await db.Meetings.FindAsync(id);
@@ -145,6 +147,7 @@ public class MeetingsController(QtmDbContext db) : ControllerBase
 
     /// <summary>Reopen a closed meeting so it can be edited again (Admin + PM).</summary>
     [HttpPost("meetings/{id:int}/reopen")]
+    [Authorize(Roles = Roles.Managers)]
     public async Task<ActionResult<MeetingRecordDto>> Reopen(int id)
     {
         var m = await db.Meetings.FindAsync(id);

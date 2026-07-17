@@ -118,11 +118,12 @@ export default function MeetingDetailPage() {
     api.get<Resource[]>('/resources').then(setResources).catch(() => {/* dropdown is best-effort */});
   }, [loadAll]);
 
-  if (!hasRole('Admin', 'ProjectManager')) return <p className="muted">เฉพาะ Admin / Project Manager เท่านั้น</p>;
+  if (!hasRole('Admin', 'ProjectManager', 'User')) return <p className="muted">กรุณาเข้าสู่ระบบ</p>;
   if (error) return <p className="error-text">{error}</p>;
   if (!meeting) return <p className="muted">กำลังโหลด…</p>;
 
   const closed = meeting.isClosed;
+  const isManager = hasRole('Admin', 'ProjectManager');   // close/reopen restricted to managers
   const topics = parseTopics(meeting.otherTopics);   // "สรุปการประชุมอื่นๆ" rows
 
   // Projects not yet on this meeting, filtered by the combobox query (capped for perf).
@@ -345,9 +346,9 @@ export default function MeetingDetailPage() {
         <span style={{ display: 'inline-flex', gap: 'var(--space-2)' }}>
           <button className="btn btn--sm" onClick={() => navigate(`/meeting-record/${meetingId}/print`)}>🖨 พิมพ์รายงาน</button>
           {!closed && <button className="btn btn--sm" onClick={openEdit}>แก้ไขหัวข้อ</button>}
-          {closed
+          {isManager && (closed
             ? <button className="btn btn--sm btn--navy" onClick={reopenMeeting}>Reopen</button>
-            : <button className="btn btn--sm btn--primary" onClick={closeMeeting}>Close Meeting</button>}
+            : <button className="btn btn--sm btn--primary" onClick={closeMeeting}>Close Meeting</button>)}
         </span>
       </div>
       <p className="muted meeting__hint">

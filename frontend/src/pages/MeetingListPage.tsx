@@ -45,7 +45,7 @@ export default function MeetingListPage() {
     api.get<MeetingSetting>('/meetings/settings').then(setSettings).catch(() => {/* defaults optional */});
   }, [load]);
 
-  if (!hasRole('Admin', 'ProjectManager')) return <p className="muted">เฉพาะ Admin / Project Manager เท่านั้น</p>;
+  if (!hasRole('Admin', 'ProjectManager', 'User')) return <p className="muted">กรุณาเข้าสู่ระบบ</p>;
 
   function openCreate() {
     // Prefill from the configured defaults; date = today, topic left blank.
