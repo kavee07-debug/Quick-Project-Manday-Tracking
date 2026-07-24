@@ -46,6 +46,12 @@ public record MeetingLoadProjects(string[]? Statuses);
 public record MeetingLineEdit(int MeetingLineId, string? UpdateDetail, string? NextAction, int SortOrder);
 public record MeetingSettingDto(string? DefaultAgenda, string? DefaultAttendees, string? DefaultPreparedBy);
 
+// ---- Summary breakdown (explain: which Job + Task rows make up a pivot number) ----
+public record MandayBreakdownRow(int ProjectId, string Position, string ProjectCode, string ProjectName,
+    string TaskName, string? TaskDescription, string EntryType, decimal Manday, string? ResourceName, string? Note);
+public record ResourceBreakdownRow(int ResourceId, string Position, string ProjectCode, string ProjectName,
+    string TaskName, string? TaskDescription, string EntryType, decimal Manday, string? Note);
+
 // ---- User management (Admin) ----
 public record UserDto(int UserId, string Email, string DisplayName, bool IsActive, string[] Roles);
 public record UserUpsert(string Email, string DisplayName, bool IsActive, string[] Roles);

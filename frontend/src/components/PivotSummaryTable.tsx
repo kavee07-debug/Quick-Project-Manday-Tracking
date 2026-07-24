@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { MandaySummaryCell } from '../api/types';
 import './PivotSummaryTable.scss';
 
@@ -32,15 +32,38 @@ function orderPositions(positions: string[]) {
   });
 }
 
+export interface ExplainCtx { rowKey: string | null; position: string | null }
+
 interface Props {
   firstColHeader: string;
   rows: PivotRow[];
   isAdmin: boolean;
+  // Content to expand inline under the clicked row when a numeric cell is clicked.
+  renderDetail?: (ctx: ExplainCtx) => ReactNode;
 }
 
-export function PivotSummaryTable({ firstColHeader, rows, isAdmin }: Props) {
+export function PivotSummaryTable({ firstColHeader, rows, isAdmin, renderDetail }: Props) {
   const [adminView, setAdminView] = useState(false);
   const showPm = isAdmin && adminView;
+
+  // Which cell's breakdown is currently expanded inline (null = none).
+  const [open, setOpen] = useState<ExplainCtx | null>(null);
+  const clickable = !!renderDetail;
+  const sameCtx = (a: ExplainCtx | null, rowKey: string | null, position: string | null) =>
+    !!a && a.rowKey === rowKey && a.position === position;
+  const isOpen = (rowKey: string | null, position: string | null) => sameCtx(open, rowKey, position);
+
+  // Extra props that make a numeric cell clickable — toggles the inline breakdown.
+  const exCls = clickable ? ' pivot__explain' : '';
+  const ex = (rowKey: string | null, position: string | null) =>
+    clickable
+      ? {
+          onClick: () => setOpen((cur) => (sameCtx(cur, rowKey, position) ? null : { rowKey, position })),
+          title: isOpen(rowKey, position) ? 'คลิกเพื่อซ่อนที่มา' : 'คลิกเพื่อดูที่มา',
+        }
+      : {};
+  const openCls = (rowKey: string | null, position: string | null) =>
+    isOpen(rowKey, position) ? ' is-expanded' : '';
 
   // Column groups = union of positions present, ordered, minus PM unless Admin View.
   const positions = useMemo(() => {
@@ -71,6 +94,20 @@ export function PivotSummaryTable({ firstColHeader, rows, isAdmin }: Props) {
     );
     return map;
   }, [rows, positions]);
+
+  // Full table width (first col + 3 per position + 3 total) for the expanded detail row.
+  const colCount = 1 + positions.length * 3 + 3;
+  // Collapse any open breakdown when the shown columns change (e.g. Admin View toggle).
+  useEffect(() => { setOpen(null); }, [showPm]);
+
+  const detailRow = (rowKey: string | null) =>
+    clickable && open && open.rowKey === rowKey ? (
+      <tr className="pivot__detailrow">
+        <td colSpan={colCount} className="pivot__detailcell">
+          {renderDetail!(open)}
+        </td>
+      </tr>
+    ) : null;
 
   return (
     <>
@@ -126,9 +163,9 @@ export function PivotSummaryTable({ firstColHeader, rows, isAdmin }: Props) {
                   const t = totals[p];
                   return (
                     <Fragment key={p}>
-                      <td className="num">{fmt(t.budgetAdjust)}</td>
-                      <td className="num">{fmt(t.actual)}</td>
-                      <td className={`num ${t.remaining < 0 ? 'over-budget' : ''}`}>{fmt(t.remaining)}</td>
+                      <td className={`num${exCls}${openCls(null, p)}`} {...ex(null, p)}>{fmt(t.budgetAdjust)}</td>
+                      <td className={`num${exCls}${openCls(null, p)}`} {...ex(null, p)}>{fmt(t.actual)}</td>
+                      <td className={`num${exCls}${openCls(null, p)} ${t.remaining < 0 ? 'over-budget' : ''}`} {...ex(null, p)}>{fmt(t.remaining)}</td>
                     </Fragment>
                   );
                 })}
@@ -143,18 +180,20 @@ export function PivotSummaryTable({ firstColHeader, rows, isAdmin }: Props) {
                   );
                   return (
                     <>
-                      <td className="num pivot__totalcol">{fmt(g.ba)}</td>
-                      <td className="num pivot__totalcol">{fmt(g.ac)}</td>
-                      <td className={`num pivot__totalcol ${g.rem < 0 ? 'over-budget' : ''}`}>{fmt(g.rem)}</td>
+                      <td className={`num pivot__totalcol${exCls}${openCls(null, null)}`} {...ex(null, null)}>{fmt(g.ba)}</td>
+                      <td className={`num pivot__totalcol${exCls}${openCls(null, null)}`} {...ex(null, null)}>{fmt(g.ac)}</td>
+                      <td className={`num pivot__totalcol${exCls}${openCls(null, null)} ${g.rem < 0 ? 'over-budget' : ''}`} {...ex(null, null)}>{fmt(g.rem)}</td>
                     </>
                   );
                 })()}
               </tr>
+              {detailRow(null)}
 
               {shownRows.map((r) => {
                 const byPos = new Map(r.cells.map((c) => [c.position, c]));
                 return (
-                  <tr key={r.key}>
+                  <Fragment key={r.key}>
+                  <tr>
                     <td className="pivot__firstcol">{r.firstCell}</td>
                     {positions.map((p) => {
                       const c = byPos.get(p);
@@ -167,11 +206,12 @@ export function PivotSummaryTable({ firstColHeader, rows, isAdmin }: Props) {
                           </Fragment>
                         );
                       }
+                      const k = String(r.key);
                       return (
                         <Fragment key={p}>
-                          <td className="num">{fmt(c.budgetAdjust)}</td>
-                          <td className="num">{fmt(c.actual)}</td>
-                          <td className={`num ${c.remaining < 0 ? 'over-budget' : ''}`}>{fmt(c.remaining)}</td>
+                          <td className={`num${exCls}${openCls(k, p)}`} {...ex(k, p)}>{fmt(c.budgetAdjust)}</td>
+                          <td className={`num${exCls}${openCls(k, p)}`} {...ex(k, p)}>{fmt(c.actual)}</td>
+                          <td className={`num${exCls}${openCls(k, p)} ${c.remaining < 0 ? 'over-budget' : ''}`} {...ex(k, p)}>{fmt(c.remaining)}</td>
                         </Fragment>
                       );
                     })}
@@ -186,15 +226,18 @@ export function PivotSummaryTable({ firstColHeader, rows, isAdmin }: Props) {
                           }),
                           { ba: 0, ac: 0, rem: 0 },
                         );
+                      const k = String(r.key);
                       return (
                         <>
-                          <td className="num pivot__totalcol">{fmt(rt.ba)}</td>
-                          <td className="num pivot__totalcol">{fmt(rt.ac)}</td>
-                          <td className={`num pivot__totalcol ${rt.rem < 0 ? 'over-budget' : ''}`}>{fmt(rt.rem)}</td>
+                          <td className={`num pivot__totalcol${exCls}${openCls(k, null)}`} {...ex(k, null)}>{fmt(rt.ba)}</td>
+                          <td className={`num pivot__totalcol${exCls}${openCls(k, null)}`} {...ex(k, null)}>{fmt(rt.ac)}</td>
+                          <td className={`num pivot__totalcol${exCls}${openCls(k, null)} ${rt.rem < 0 ? 'over-budget' : ''}`} {...ex(k, null)}>{fmt(rt.rem)}</td>
                         </>
                       );
                     })()}
                   </tr>
+                  {detailRow(String(r.key))}
+                  </Fragment>
                 );
               })}
             </tbody>

@@ -340,6 +340,21 @@ export interface ResourceMandaySummaryRow {
   cells: MandaySummaryCell[];
 }
 
+// Un-aggregated manday rows behind a pivot number (the "explain" drill-down).
+export interface BreakdownRow {
+  position: string;
+  projectCode: string;
+  projectName: string;
+  taskName: string;
+  taskDescription?: string | null;
+  entryType: string;
+  manday: number;
+  resourceName?: string | null;
+  note?: string | null;
+}
+export interface MandayBreakdownRow extends BreakdownRow { projectId: number; }
+export interface ResourceBreakdownRow extends BreakdownRow { resourceId: number; }
+
 export interface TaskSummary {
   taskId: number;
   taskName: string;

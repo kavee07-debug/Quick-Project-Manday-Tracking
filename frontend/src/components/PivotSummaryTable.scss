@@ -1,4 +1,29 @@
 .pivot {
+  // Clickable numeric cell for the "explain" drill-down.
+  &__explain { cursor: pointer; }
+  &__explain:hover { text-decoration: underline; text-decoration-style: dotted; }
+
+  // The cell(s) whose breakdown is currently expanded inline — amber, so it
+  // visually matches the expanded detail block below.
+  &__explain.is-expanded {
+    background: rgba(217, 139, 22, 0.22);
+    box-shadow: inset 0 0 0 1px var(--color-adjust);
+    font-weight: var(--font-weight-bold);
+  }
+
+  // Inline expanded breakdown row — same amber family + a left accent bar tying
+  // it to the highlighted summary cell above.
+  &__detailrow > &__detailcell {
+    padding: var(--space-3) var(--space-4);
+    background: rgba(217, 139, 22, 0.07);
+    border-left: 3px solid var(--color-adjust);
+    border-bottom: 2px solid var(--color-border);
+    white-space: normal;
+
+    // Orange frame around the whole explain list.
+    .card { border: 2px solid var(--color-adjust); }
+  }
+
   &__toolbar {
     display: flex;
     justify-content: flex-end;
@@ -20,7 +45,9 @@
   &__scroll { overflow-x: auto; }
 
   &__table {
-    th, td { white-space: nowrap; }
+    // Full gridlines; the heavier group / Total dividers below still win on
+    // specificity, and the coloured group tops are inline styles (also win).
+    th, td { white-space: nowrap; border: 1px solid var(--color-border); }
 
     .pivot__group {
       text-align: center;
@@ -28,6 +55,9 @@
       font-weight: var(--font-weight-bold);
       color: var(--color-text);
     }
+
+    // Keep the divider after the PROJECT column heavier than the 1px grid.
+    .pivot__firstcol { border-right: 2px solid var(--color-border); }
   }
 
   // Total column on the right — bold, set off with a darker left divider.
@@ -59,3 +89,17 @@
     border-bottom: 2px solid var(--color-border);
   }
 }
+
+// Explain breakdown table: full gridlines + zebra striping for readability.
+.bd {
+  th, td { border: 1px solid var(--color-border); }
+  thead th:not(.bd__num) { background: var(--color-bg); }
+  tbody tr:nth-child(even) { background: var(--color-bg); }
+  tbody tr:hover { background: rgba(217, 139, 22, 0.10); }
+  tfoot { background: var(--color-bg); }
+}
+
+// Numeric columns echo the amber of the summary cell that opened it — a cell's
+// own background always paints over its row, so these stay amber over the zebra.
+.bd__num { background: rgba(217, 139, 22, 0.16); }
+.bd tbody tr:hover .bd__num { background: rgba(217, 139, 22, 0.26); }

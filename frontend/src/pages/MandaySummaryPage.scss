@@ -4,6 +4,13 @@
   &__projname { font-weight: var(--font-weight-regular); }
   &__status { margin-left: var(--space-2); }
 
+  // Inline expand/collapse breakdown shown under a clicked pivot number.
+  &__detail-head {
+    font-weight: var(--font-weight-bold);
+    margin-bottom: var(--space-2);
+    color: var(--color-text);
+  }
+
   // Status/type click-to-toggle filter chips (uses the shared .status-chip).
   &__filterbar {
     display: flex;
@@ -24,4 +31,32 @@
     background: var(--color-border);
     margin: 0 var(--space-2);
   }
+}
+
+// Job multi-select filter (chips + searchable combobox).
+.jobfilter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+
+  &__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px 2px 10px;
+    border-radius: 999px;
+    background: var(--color-surface-alt, rgba(0, 0, 0, 0.06));
+    font-size: var(--font-size-sm);
+    button {
+      border: none;
+      background: none;
+      cursor: pointer;
+      line-height: 1;
+      font-size: 1.1em;
+      color: var(--color-text-muted);
+      padding: 0 4px;
+    }
+  }
+  &__combo { position: relative; display: inline-block; min-width: 200px; }
 }

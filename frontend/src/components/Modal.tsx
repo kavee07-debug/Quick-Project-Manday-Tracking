@@ -5,12 +5,13 @@ interface Props {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  className?: string;
 }
 
-export function Modal({ title, onClose, children }: Props) {
+export function Modal({ title, onClose, children, className }: Props) {
   return (
     <div className="modal__backdrop" onClick={onClose}>
-      <div className="modal card" onClick={(e) => e.stopPropagation()}>
+      <div className={`modal card${className ? ` ${className}` : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="modal__head">
           <h2 className="modal__title">{title}</h2>
           <button className="btn btn--sm" onClick={onClose} aria-label="close">✕</button>
