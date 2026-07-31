@@ -99,6 +99,10 @@
   tfoot { background: var(--color-bg); }
 }
 
+// Clickable sort headers.
+.bd__sort { cursor: pointer; user-select: none; white-space: nowrap; }
+.bd thead th.bd__sort:hover { background: rgba(217, 139, 22, 0.14); }
+
 // Numeric columns echo the amber of the summary cell that opened it — a cell's
 // own background always paints over its row, so these stay amber over the zebra.
 .bd__num { background: rgba(217, 139, 22, 0.16); }

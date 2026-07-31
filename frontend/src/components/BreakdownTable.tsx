@@ -1,7 +1,21 @@
+import { useState } from 'react';
 import type { BreakdownRow } from '../api/types';
 
 function fmt(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+}
+
+type SortKey = 'job' | 'task' | 'resource' | 'ba' | 'actual' | 'remaining' | 'remark';
+function sortVal(g: Group, key: SortKey): string | number {
+  switch (key) {
+    case 'job': return g.projectCode;
+    case 'task': return g.taskName;
+    case 'resource': return g.resourceName ?? '';
+    case 'ba': return g.budgetAdjust;
+    case 'actual': return g.actual;
+    case 'remaining': return g.budgetAdjust - g.actual;
+    case 'remark': return g.notes.join(' · ');
+  }
 }
 
 // One aggregated line: the manday rows for a given task + resource, pivoted into
@@ -26,6 +40,11 @@ export function BreakdownTable({ rows, maxHeight = '60vh', accent = false, hideJ
   accent?: boolean;
   hideJob?: boolean;   // drill-down under a single project already names the Job — drop the column
 }) {
+  // Click a header to sort; click again to flip direction. Null = default order.
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' } | null>(null);
+  const onSort = (key: SortKey) =>
+    setSort((p) => (p?.key === key ? { key, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
+
   // Show the Resource column only when the breakdown carries it (Manday Summary page).
   const showResource = rows.some((r) => r.resourceName != null);
 
@@ -46,10 +65,19 @@ export function BreakdownTable({ rows, maxHeight = '60vh', accent = false, hideJ
     if (r.note && !g.notes.includes(r.note)) g.notes.push(r.note);
   }
 
-  const sorted = [...groups.values()].sort(
-    (a, b) => a.projectCode.localeCompare(b.projectCode, undefined, { numeric: true })
-      || a.taskName.localeCompare(b.taskName, undefined, { numeric: true }),
-  );
+  const sorted = [...groups.values()].sort((a, b) => {
+    if (sort) {
+      const va = sortVal(a, sort.key);
+      const vb = sortVal(b, sort.key);
+      const c = typeof va === 'number' && typeof vb === 'number'
+        ? va - vb
+        : String(va).localeCompare(String(vb), undefined, { numeric: true });
+      if (c !== 0) return sort.dir === 'asc' ? c : -c;
+    }
+    // Fall back to the default Job → Task order (also the tie-breaker when sorting).
+    return a.projectCode.localeCompare(b.projectCode, undefined, { numeric: true })
+      || a.taskName.localeCompare(b.taskName, undefined, { numeric: true });
+  });
 
   const tot = sorted.reduce(
     (a, g) => ({ ba: a.ba + g.budgetAdjust, ac: a.ac + g.actual }),
@@ -61,18 +89,26 @@ export function BreakdownTable({ rows, maxHeight = '60vh', accent = false, hideJ
   const cols = leftCount + 4;                                          // + 3 numeric + Remark
   const numCls = `num${accent ? ' bd__num' : ''}`;
 
+  // Sortable header: click to sort, caret shows the active key + direction.
+  const caret = (key: SortKey) => (sort?.key === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '');
+  const th = (key: SortKey, label: string, cls = '') => (
+    <th className={`bd__sort${cls ? ` ${cls}` : ''}`} onClick={() => onSort(key)} title="คลิกเพื่อเรียงลำดับ">
+      {label}{caret(key)}
+    </th>
+  );
+
   return (
     <div className="card" style={{ maxHeight, overflowY: 'auto' }}>
       <table className="table bd">
         <thead>
           <tr>
-            {!hideJob && <th>Job</th>}
-            <th>Task</th>
-            {showResource && <th>Resource</th>}
-            <th className={numCls}>Budget+Adjust</th>
-            <th className={numCls}>Actual</th>
-            <th className={numCls}>Remaining</th>
-            <th>Remark</th>
+            {!hideJob && th('job', 'Job')}
+            {th('task', 'Task')}
+            {showResource && th('resource', 'Resource')}
+            {th('ba', 'Budget+Adjust', numCls)}
+            {th('actual', 'Actual', numCls)}
+            {th('remaining', 'Remaining', numCls)}
+            {th('remark', 'Remark')}
           </tr>
         </thead>
         <tbody>
