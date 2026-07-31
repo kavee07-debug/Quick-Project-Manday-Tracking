@@ -79,7 +79,7 @@ export default function MandaySummaryPage() {
     return (
       <div className="msummary__detail">
         <div className="msummary__detail-head">ที่มา: {projLabel} · {posLabel}</div>
-        <BreakdownTable rows={items} maxHeight="40vh" accent />
+        <BreakdownTable rows={items} maxHeight="40vh" accent hideJob={rowKey != null} />
       </div>
     );
   }

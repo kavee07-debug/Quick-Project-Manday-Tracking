@@ -20,10 +20,11 @@ interface Group {
 // Table behind a clicked pivot number — grouped by task + resource, showing the
 // same Budget+Adjust / Actual / Remaining breakdown as the summary. Used both
 // inline (expand/collapse) and inside BreakdownModal.
-export function BreakdownTable({ rows, maxHeight = '60vh', accent = false }: {
+export function BreakdownTable({ rows, maxHeight = '60vh', accent = false, hideJob = false }: {
   rows: BreakdownRow[];
   maxHeight?: string;
   accent?: boolean;
+  hideJob?: boolean;   // drill-down under a single project already names the Job — drop the column
 }) {
   // Show the Resource column only when the breakdown carries it (Manday Summary page).
   const showResource = rows.some((r) => r.resourceName != null);
@@ -54,8 +55,10 @@ export function BreakdownTable({ rows, maxHeight = '60vh', accent = false }: {
     (a, g) => ({ ba: a.ba + g.budgetAdjust, ac: a.ac + g.actual }),
     { ba: 0, ac: 0 },
   );
-  // Columns: Job, Task, Remark (+ Resource), Budget+Adjust, Actual, Remaining.
-  const cols = showResource ? 7 : 6;
+  // Column order: [Job,] Task, [Resource,] Budget+Adjust, Actual, Remaining, Remark.
+  // Remark is free text and goes last so it never pushes the numeric columns right.
+  const leftCount = (hideJob ? 0 : 1) + 1 + (showResource ? 1 : 0);   // label cols before the numbers
+  const cols = leftCount + 4;                                          // + 3 numeric + Remark
   const numCls = `num${accent ? ' bd__num' : ''}`;
 
   return (
@@ -63,13 +66,13 @@ export function BreakdownTable({ rows, maxHeight = '60vh', accent = false }: {
       <table className="table bd">
         <thead>
           <tr>
-            <th>Job</th>
+            {!hideJob && <th>Job</th>}
             <th>Task</th>
-            <th>Remark</th>
             {showResource && <th>Resource</th>}
             <th className={numCls}>Budget+Adjust</th>
             <th className={numCls}>Actual</th>
             <th className={numCls}>Remaining</th>
+            <th>Remark</th>
           </tr>
         </thead>
         <tbody>
@@ -80,16 +83,16 @@ export function BreakdownTable({ rows, maxHeight = '60vh', accent = false }: {
               const rem = g.budgetAdjust - g.actual;
               return (
                 <tr key={i}>
-                  <td><b className="nowrap">{g.projectCode}</b> <span className="muted">{g.projectName}</span></td>
+                  {!hideJob && <td><b className="nowrap">{g.projectCode}</b> <span className="muted">{g.projectName}</span></td>}
                   <td>
                     <b className="nowrap">{g.taskName}</b>
                     {g.taskDescription && <span className="muted"> {g.taskDescription}</span>}
                   </td>
-                  <td>{g.notes.length ? g.notes.join(' · ') : <span className="muted">—</span>}</td>
                   {showResource && <td>{g.resourceName ?? <span className="muted">ไม่ระบุ</span>}</td>}
                   <td className={numCls}>{fmt(g.budgetAdjust)}</td>
                   <td className={numCls}>{fmt(g.actual)}</td>
                   <td className={`${numCls}${rem < 0 ? ' over-budget' : ''}`}>{fmt(rem)}</td>
+                  <td>{g.notes.length ? g.notes.join(' · ') : <span className="muted">—</span>}</td>
                 </tr>
               );
             })
@@ -98,10 +101,11 @@ export function BreakdownTable({ rows, maxHeight = '60vh', accent = false }: {
         {sorted.length > 0 && (
           <tfoot>
             <tr>
-              <td colSpan={cols - 3} className="num"><b>รวม</b></td>
+              <td colSpan={leftCount} className="num"><b>รวม</b></td>
               <td className={numCls}><b>{fmt(tot.ba)}</b></td>
               <td className={numCls}><b>{fmt(tot.ac)}</b></td>
               <td className={`${numCls}${tot.ba - tot.ac < 0 ? ' over-budget' : ''}`}><b>{fmt(tot.ba - tot.ac)}</b></td>
+              <td></td>
             </tr>
           </tfoot>
         )}
