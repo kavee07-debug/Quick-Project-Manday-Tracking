@@ -12,7 +12,7 @@ const STATUS_CHIP: Record<string, string> = {
   Open: 'badge--green', Hold: 'badge--orange', Completed: 'badge--blue', Cancel: 'badge--red',
 };
 const TYPE_CHIP: Record<string, string> = {
-  Implement: 'badge--blue', Customize: 'badge--orange', Training: 'badge--purple', Internal: '', Other: '',
+  Implement: 'badge--blue', Customize: 'badge--orange', Training: 'badge--purple', Internal: '', MA: 'badge--green', Other: '',
 };
 
 export default function MandaySummaryPage() {

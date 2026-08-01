@@ -19,7 +19,7 @@ export interface User {
 }
 export type UserUpsert = Pick<User, 'email' | 'displayName' | 'isActive' | 'roles'>;
 
-export const PROJECT_TYPES = ['Implement', 'Customize', 'Training', 'Internal', 'Other'] as const;
+export const PROJECT_TYPES = ['Implement', 'Customize', 'Training', 'Internal', 'MA', 'Other'] as const;
 export const PROJECT_STATUSES = ['Open', 'Hold', 'Completed', 'Cancel'] as const;
 
 export interface Customer {

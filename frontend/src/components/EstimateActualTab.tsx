@@ -22,10 +22,13 @@ interface FormState extends MandayUpsert {
   taskId: number;
 }
 
-export function EstimateActualTab({ projectId, projectCode, projectRevenue }:
-  { projectId: number; projectCode: string; projectRevenue?: number | null }) {
+export function EstimateActualTab({ projectId, projectCode, projectRevenue, projectType }:
+  { projectId: number; projectCode: string; projectRevenue?: number | null; projectType?: string | null }) {
   const { isManager, hasRole } = useAuth();
-  const canRecordActual = isManager || hasRole('Member');
+  // MA projects don't plan mandays here — Budget/Adjust aren't set and Actuals come
+  // from the D365 timesheet Apply, so the manual "+ เพิ่ม Manday" button is hidden.
+  const isMA = projectType === 'MA';
+  const canRecordActual = (isManager || hasRole('Member')) && !isMA;
 
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
@@ -211,13 +214,15 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue }:
                   </span>
                 )}
               </div>
-              {canRecordActual && (
-                task.status === 'Done'
-                  ? <span className="muted">Task เสร็จแล้ว — เพิ่มรายการไม่ได้</span>
-                  : <button className="btn btn--sm btn--primary" onClick={() => openAdd(task.taskId)}>
-                      + เพิ่ม Manday
-                    </button>
-              )}
+              {isMA
+                ? <span className="muted">MA — ไม่กำหนด Budget/Adjust · Actual มาจาก Apply timesheet</span>
+                : canRecordActual && (
+                    task.status === 'Done'
+                      ? <span className="muted">Task เสร็จแล้ว — เพิ่มรายการไม่ได้</span>
+                      : <button className="btn btn--sm btn--primary" onClick={() => openAdd(task.taskId)}>
+                          + เพิ่ม Manday
+                        </button>
+                  )}
             </div>
 
             <table className="table">

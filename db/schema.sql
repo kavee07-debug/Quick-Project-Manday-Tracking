@@ -116,7 +116,7 @@ CREATE TABLE dbo.Project (
     Name          NVARCHAR(300) NOT NULL,
     Description   NVARCHAR(MAX) NULL,
     CustomerId    INT NULL,                   -- owning customer (nullable)
-    Type          NVARCHAR(20) NULL,          -- Implement | Customize | Training | Internal | Other
+    Type          NVARCHAR(20) NULL,          -- Implement | Customize | Training | Internal | MA | Other
     Status        NVARCHAR(30) NOT NULL CONSTRAINT DF_Project_Status DEFAULT (N'Open'),
     Progress      DECIMAL(5,2) NULL,          -- completion %, e.g. 70.01 (0..100)
     Revenue       DECIMAL(18,2) NULL,         -- project value / revenue
@@ -128,7 +128,7 @@ CREATE TABLE dbo.Project (
     UpdatedAt     DATETIME2(0) NULL,
     CONSTRAINT UQ_Project_Code     UNIQUE (Code),
     CONSTRAINT FK_Project_Customer FOREIGN KEY (CustomerId) REFERENCES dbo.Customer(CustomerId),
-    CONSTRAINT CK_Project_Type     CHECK (Type IS NULL OR Type IN (N'Implement', N'Customize', N'Training', N'Internal', N'Other')),
+    CONSTRAINT CK_Project_Type     CHECK (Type IS NULL OR Type IN (N'Implement', N'Customize', N'Training', N'Internal', N'MA', N'Other')),
     CONSTRAINT CK_Project_Status   CHECK (Status IN (N'Open', N'Hold', N'Completed', N'Cancel')),
     CONSTRAINT CK_Project_Progress CHECK (Progress IS NULL OR (Progress >= 0 AND Progress <= 100))
 );

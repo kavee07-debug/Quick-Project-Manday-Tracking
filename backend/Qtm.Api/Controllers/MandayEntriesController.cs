@@ -47,7 +47,7 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
         if (!await db.Tasks.AnyAsync(t => t.TaskId == taskId))
             return NotFound();
 
-        var validation = await ValidateAsync(req);
+        var validation = await ValidateAsync(taskId, req);
         if (validation is not null) return validation;
 
         var m = new MandayEntry
@@ -75,7 +75,7 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
         var m = await db.MandayEntries.FindAsync(id);
         if (m is null) return NotFound();
 
-        var validation = await ValidateAsync(req);
+        var validation = await ValidateAsync(m.TaskId, req);
         if (validation is not null) return validation;
 
         m.EntryType = req.EntryType;
@@ -102,10 +102,20 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
         return NoContent();
     }
 
-    private async Task<ActionResult?> ValidateAsync(MandayUpsert req)
+    private async Task<ActionResult?> ValidateAsync(int taskId, MandayUpsert req)
     {
         if (!ValidTypes.Contains(req.EntryType))
             return BadRequest(new { message = "EntryType must be Budget, Actual or Adjust." });
+        // MA projects don't plan mandays: Budget/Adjust are not allowed (Actuals come from timesheet).
+        if (req.EntryType is "Budget" or "Adjust")
+        {
+            var projectType = await (from t in db.Tasks
+                                     join p in db.Projects on t.ProjectId equals p.ProjectId
+                                     where t.TaskId == taskId
+                                     select p.Type).FirstOrDefaultAsync();
+            if (projectType == "MA")
+                return BadRequest(new { message = "โปรเจกต์ประเภท MA ไม่สามารถกำหนด Budget/Adjust ได้" });
+        }
         if (req.Manday < 0)
             return BadRequest(new { message = "Manday must be zero or greater." });
         if (req.StartDate is DateOnly sd && req.EndDate is DateOnly ed && ed < sd)

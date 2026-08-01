@@ -50,7 +50,7 @@ export default function ProjectDetailPage() {
       {tab === 'tasks' ? (
         <TaskTab projectId={projectId} />
       ) : tab === 'manday' ? (
-        <EstimateActualTab projectId={projectId} projectCode={project.code} projectRevenue={project.revenue} />
+        <EstimateActualTab projectId={projectId} projectCode={project.code} projectRevenue={project.revenue} projectType={project.type} />
       ) : (
         <ProjectTab project={project} onChanged={setProject} />
       )}
