@@ -105,6 +105,16 @@ export default function D365TimesheetPage() {
   const allVisibleSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
   const someVisibleSelected = filtered.some((r) => selected.has(r.id));
 
+  // Rows (within the current filter) whose New Job/New Task validate as OK — i.e. ready to Apply.
+  const validNewCount = useMemo(() => filtered.filter((r) => r.validateNewStatus === 'OK').length, [filtered]);
+  function selectValidNew() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      filtered.forEach((r) => { if (r.validateNewStatus === 'OK') next.add(r.id); });
+      return next;
+    });
+  }
+
   function toggleOne(id: number) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -288,6 +298,10 @@ export default function D365TimesheetPage() {
             {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </label>
+        <button className="btn btn--sm" onClick={selectValidNew} disabled={validNewCount === 0}
+          title="เลือกทุกแถวที่ New Job / New Task ตรงกับระบบ (✅) — พร้อม Apply">
+          ✅ เลือกที่ Vld. New ผ่าน ({validNewCount})
+        </button>
         <span className="muted">
           แสดง {filtered.length} / {rows.length} รายการ{selected.size > 0 && ` · เลือก ${selected.size}`}
         </span>
