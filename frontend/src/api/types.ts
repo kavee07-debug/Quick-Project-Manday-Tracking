@@ -283,6 +283,7 @@ export interface D365TimesheetRow {
   id: number;
   systemId: string;
   jobNo?: string | null;
+  jobDescription?: string | null;
   jobTaskNo?: string | null;
   timesheetDate?: string | null;
   resourceNo?: string | null;

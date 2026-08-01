@@ -56,7 +56,7 @@ public class D365TimesheetController(QtmDbContext db, D365TimesheetService times
             var resName = string.IsNullOrWhiteSpace(r.ResourceNo) ? null
                 : resourceNames.GetValueOrDefault(r.ResourceNo!);
 
-            return new D365TimesheetRow(r.TimesheetStagingId, r.SystemId, r.JobNo, r.JobTaskNo,
+            return new D365TimesheetRow(r.TimesheetStagingId, r.SystemId, r.JobNo, r.JobDescription, r.JobTaskNo,
                 r.TimesheetDate, r.ResourceNo, resName, r.QuantityHour, r.QuantityMD, r.Comment,
                 r.ProjectManager, r.TimesheetStatus, r.NewJobNo, r.NewTaskNo,
                 Validate(r.JobNo, r.JobTaskNo), Validate(r.NewJobNo, r.NewTaskNo),

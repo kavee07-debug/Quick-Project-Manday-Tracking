@@ -17,7 +17,7 @@ public record D365JobPlanLine(string? No, string? JobTaskNo, string? LineType, d
 public record D365JobTask(string TaskNo, string? Description);
 
 /// <summary>A timesheet line pulled from the QERP entitySetTimesheettoPowerBI entity set.</summary>
-public record D365Timesheet(string SystemId, string? JobNo, string? JobTaskNo, DateOnly? StartDate,
+public record D365Timesheet(string SystemId, string? JobNo, string? JobDescription, string? JobTaskNo, DateOnly? StartDate,
     string? No, decimal? Quantity, decimal? QuantityMD, string? Comment, string? ProjectManager,
     string? TimesheetStatus, string RawJson);
 
@@ -244,6 +244,8 @@ public class D365BcClient(HttpClient http)
                     rows.Add(new D365Timesheet(
                         SystemId: sysId!,
                         JobNo: FirstString(el, "jobNo"),
+                        // BC job name — tolerant to the custom entity's field naming.
+                        JobDescription: FirstString(el, "jobDescription", "jobName", "jobDisplayName", "description"),
                         JobTaskNo: FirstString(el, "jobTaskNo"),
                         StartDate: FirstDate(el, "startDate"),
                         No: FirstString(el, "no", "resourceNo"),

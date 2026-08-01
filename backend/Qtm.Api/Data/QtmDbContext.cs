@@ -207,6 +207,7 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.HasKey(x => x.TimesheetStagingId);
             e.Property(x => x.SystemId).HasMaxLength(100);
             e.Property(x => x.JobNo).HasMaxLength(50);
+            e.Property(x => x.JobDescription).HasMaxLength(250);
             e.Property(x => x.JobTaskNo).HasMaxLength(50);
             e.Property(x => x.ResourceNo).HasMaxLength(50);
             e.Property(x => x.QuantityHour).HasColumnType("decimal(18,2)");

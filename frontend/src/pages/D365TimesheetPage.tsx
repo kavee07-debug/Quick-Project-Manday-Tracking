@@ -90,7 +90,7 @@ export default function D365TimesheetPage() {
       if (resourceFilter && r.resourceNo !== resourceFilter) return false;
       if (statusFilter && r.timesheetStatus !== statusFilter) return false;
       if (!q) return true;
-      return [r.jobNo, r.jobTaskNo, r.resourceNo, r.resourceName, r.projectManager, r.newJobNo, r.newTaskNo, r.comment]
+      return [r.jobNo, r.jobDescription, r.jobTaskNo, r.resourceNo, r.resourceName, r.projectManager, r.newJobNo, r.newTaskNo, r.comment]
         .some((v) => (v ?? '').toLowerCase().includes(q));
     });
   }, [rows, query, resourceFilter, statusFilter]);
@@ -315,6 +315,7 @@ export default function D365TimesheetPage() {
                   onChange={toggleAllVisible} disabled={filtered.length === 0} />
               </th>
               <th className="nowrap">Job No</th>
+              <th className="nowrap" title="ชื่อ Job จาก D365BC">Job Description (BC)</th>
               <th className="nowrap">Job Task No</th>
               <th className="nowrap">Date</th>
               <th>No.</th>
@@ -332,11 +333,11 @@ export default function D365TimesheetPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={16} className="muted">กำลังโหลด…</td></tr>
+              <tr><td colSpan={17} className="muted">กำลังโหลด…</td></tr>
             ) : rows.length === 0 ? (
-              <tr><td colSpan={16} className="muted">ยังไม่มีรายการ — เลือกช่วงวันที่แล้วกด “ดึงข้อมูลจาก D365BC”</td></tr>
+              <tr><td colSpan={17} className="muted">ยังไม่มีรายการ — เลือกช่วงวันที่แล้วกด “ดึงข้อมูลจาก D365BC”</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={16} className="muted">ไม่พบรายการที่ค้นหา</td></tr>
+              <tr><td colSpan={17} className="muted">ไม่พบรายการที่ค้นหา</td></tr>
             ) : (
               filtered.map((r) => (
                 <Fragment key={r.id}>
@@ -349,6 +350,7 @@ export default function D365TimesheetPage() {
                       {r.jobNo ?? '—'}
                       {r.alreadyInActual && <span className="d365job__ma" title="SystemId นี้ลง Actual แล้ว">⚠️</span>}
                     </td>
+                    <td>{r.jobDescription || '—'}</td>
                     <td className="nowrap">{r.jobTaskNo ?? '—'}</td>
                     <td className="nowrap">{r.timesheetDate ?? '—'}</td>
                     <td>{r.resourceNo ?? '—'}</td>

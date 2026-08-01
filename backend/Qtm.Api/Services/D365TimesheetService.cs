@@ -44,6 +44,7 @@ public class D365TimesheetService(QtmDbContext db, D365BcClient client)
                 {
                     // Refresh API fields; keep the user's New Job/New Task edits.
                     row.JobNo = t.JobNo;
+                    row.JobDescription = t.JobDescription;
                     row.JobTaskNo = t.JobTaskNo;
                     row.TimesheetDate = t.StartDate;
                     row.ResourceNo = t.No;
@@ -63,6 +64,7 @@ public class D365TimesheetService(QtmDbContext db, D365BcClient client)
                     {
                         SystemId = t.SystemId,
                         JobNo = t.JobNo,
+                        JobDescription = t.JobDescription,
                         JobTaskNo = t.JobTaskNo,
                         TimesheetDate = t.StartDate,
                         ResourceNo = t.No,

@@ -100,7 +100,7 @@ public record StagingIdsRequest(int[] Ids);
 public record FetchByJobRequest(string JobNo);
 
 // ---- D365BC Timesheet staging ----
-public record D365TimesheetRow(int Id, string SystemId, string? JobNo, string? JobTaskNo,
+public record D365TimesheetRow(int Id, string SystemId, string? JobNo, string? JobDescription, string? JobTaskNo,
     DateOnly? TimesheetDate, string? ResourceNo, string? ResourceName, decimal? QuantityHour, decimal? QuantityMD,
     string? Comment, string? ProjectManager, string? TimesheetStatus,
     string? NewJobNo, string? NewTaskNo, string ValidateStatus, string ValidateNewStatus, bool AlreadyInActual);

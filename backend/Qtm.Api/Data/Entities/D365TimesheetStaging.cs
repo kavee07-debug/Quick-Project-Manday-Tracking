@@ -9,6 +9,7 @@ public class D365TimesheetStaging
     public int TimesheetStagingId { get; set; }
     public string SystemId { get; set; } = string.Empty;   // BC systemId (upsert key)
     public string? JobNo { get; set; }
+    public string? JobDescription { get; set; }            // BC job name (shown even without a local master)
     public string? JobTaskNo { get; set; }
     public DateOnly? TimesheetDate { get; set; }            // API startDate
     public string? ResourceNo { get; set; }                // API "no" (resource code)

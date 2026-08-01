@@ -334,6 +334,7 @@ CREATE TABLE dbo.D365TimesheetStaging (
     TimesheetStagingId INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_D365TimesheetStaging PRIMARY KEY,
     SystemId        NVARCHAR(100) NOT NULL,      -- BC systemId (upsert key)
     JobNo           NVARCHAR(50)  NULL,
+    JobDescription  NVARCHAR(250) NULL,          -- BC job name (shown even without a local master)
     JobTaskNo       NVARCHAR(50)  NULL,
     TimesheetDate   DATE          NULL,          -- API startDate
     ResourceNo      NVARCHAR(50)  NULL,          -- API "no" (resource code), shown as "No."
