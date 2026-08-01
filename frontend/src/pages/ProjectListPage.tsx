@@ -431,7 +431,10 @@ export default function ProjectListPage() {
                     <a onClick={() => navigate(`/projects/${p.projectId}`)} style={{ cursor: 'pointer' }}>
                       {p.code}
                     </a>
-                    {p.code.toUpperCase().startsWith('SOJ') && p.totalBudget === 0 && p.totalAdjust === 0 && (
+                    {p.type === 'MA' ? (
+                      <span className="badge badge--green" style={{ marginLeft: 'var(--space-2)' }}
+                        title="โปรเจกต์ประเภท MA — ไม่กำหนด Budget/Adjust">MA</span>
+                    ) : p.code.toUpperCase().startsWith('SOJ') && p.totalBudget === 0 && p.totalAdjust === 0 && (
                       <span className="projects__new" title="ยังไม่กำหนด Budget/Adjust — คลิกที่รหัสเพื่อไปกำหนด">🆕</span>
                     )}
                   </td>
