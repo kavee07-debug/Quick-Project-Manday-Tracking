@@ -41,6 +41,19 @@ public class D365TimesheetController(QtmDbContext db, D365TimesheetService times
             .GroupBy(r => r.Code, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase);
 
+        // Job No -> job name, sourced from BC via the local Project master (authoritative) with a
+        // fallback to D365ProjectStaging (covers jobs pulled from BC but not yet promoted to a Project).
+        // Used to label a staged line's job even when its stored JobDescription is empty.
+        var jobNames = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var ps in await db.D365ProjectStagings
+                     .Where(p => p.JobNo != null && p.ProjectName != null)
+                     .Select(p => new { p.JobNo, p.ProjectName }).ToListAsync(ct))
+            jobNames[ps.JobNo!] = ps.ProjectName;
+        foreach (var pr in await db.Projects
+                     .Where(p => p.Name != null && p.Name != "")
+                     .Select(p => new { p.Code, p.Name }).ToListAsync(ct))
+            jobNames[pr.Code] = pr.Name;   // Project master wins over staging
+
         // Validate a job/task pair against the in-app Project + Task masters.
         string Validate(string? jobNo, string? taskNo)
         {
@@ -55,8 +68,11 @@ public class D365TimesheetController(QtmDbContext db, D365TimesheetService times
         {
             var resName = string.IsNullOrWhiteSpace(r.ResourceNo) ? null
                 : resourceNames.GetValueOrDefault(r.ResourceNo!);
+            // Prefer the value stored at fetch; fall back to the local job-name map.
+            var jobDesc = !string.IsNullOrWhiteSpace(r.JobDescription) ? r.JobDescription
+                : (string.IsNullOrWhiteSpace(r.JobNo) ? null : jobNames.GetValueOrDefault(r.JobNo!));
 
-            return new D365TimesheetRow(r.TimesheetStagingId, r.SystemId, r.JobNo, r.JobDescription, r.JobTaskNo,
+            return new D365TimesheetRow(r.TimesheetStagingId, r.SystemId, r.JobNo, jobDesc, r.JobTaskNo,
                 r.TimesheetDate, r.ResourceNo, resName, r.QuantityHour, r.QuantityMD, r.Comment,
                 r.ProjectManager, r.TimesheetStatus, r.NewJobNo, r.NewTaskNo,
                 Validate(r.JobNo, r.JobTaskNo), Validate(r.NewJobNo, r.NewTaskNo),

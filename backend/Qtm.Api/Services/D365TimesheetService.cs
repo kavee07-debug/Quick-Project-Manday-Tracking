@@ -33,6 +33,21 @@ public class D365TimesheetService(QtmDbContext db, D365BcClient client)
             var token = await client.GetTokenAsync(s, ct);
             rows = await client.GetTimesheetsAsync(s, token, start, end, ct);
 
+            // Resolve each line's job name from BC's standard projects entity (number → displayName).
+            // Best-effort: a failure here must not abort the timesheet pull (names also fall back to the
+            // local Project/staging masters at list time).
+            var bcJobNames = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                foreach (var p in await client.GetProjectsAsync(s, token, ct))
+                    if (!string.IsNullOrWhiteSpace(p.Number) && !string.IsNullOrWhiteSpace(p.DisplayName))
+                        bcJobNames[p.Number] = p.DisplayName;
+            }
+            catch (D365BcException ex) { errors.Add($"ชื่อ Job: {ex.Message}"); }
+
+            string? JobName(string? jobNo) =>
+                !string.IsNullOrWhiteSpace(jobNo) && bcJobNames.TryGetValue(jobNo!, out var n) ? n : null;
+
             var ids = rows.Select(r => r.SystemId).ToList();
             var existing = await db.D365TimesheetStagings
                 .Where(x => ids.Contains(x.SystemId))
@@ -44,7 +59,7 @@ public class D365TimesheetService(QtmDbContext db, D365BcClient client)
                 {
                     // Refresh API fields; keep the user's New Job/New Task edits.
                     row.JobNo = t.JobNo;
-                    row.JobDescription = t.JobDescription;
+                    row.JobDescription = JobName(t.JobNo) ?? t.JobDescription;
                     row.JobTaskNo = t.JobTaskNo;
                     row.TimesheetDate = t.StartDate;
                     row.ResourceNo = t.No;
@@ -64,7 +79,7 @@ public class D365TimesheetService(QtmDbContext db, D365BcClient client)
                     {
                         SystemId = t.SystemId,
                         JobNo = t.JobNo,
-                        JobDescription = t.JobDescription,
+                        JobDescription = JobName(t.JobNo) ?? t.JobDescription,
                         JobTaskNo = t.JobTaskNo,
                         TimesheetDate = t.StartDate,
                         ResourceNo = t.No,

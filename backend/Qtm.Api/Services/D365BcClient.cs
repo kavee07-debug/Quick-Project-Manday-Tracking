@@ -10,6 +10,9 @@ public record D365Job(string No, string? Id, string? ProjectManager,
 /// <summary>An item pulled from the standard D365BC items(v2.0) entity set.</summary>
 public record D365Item(string Number, string? DisplayName, string? ItemCategoryCode);
 
+/// <summary>A project/job name from the standard D365BC projects(v2.0) entity set (number → displayName).</summary>
+public record D365ProjectName(string Number, string? DisplayName);
+
 /// <summary>A jobPlanningLines line — the item no, its job task, line type, and the LCY amount.</summary>
 public record D365JobPlanLine(string? No, string? JobTaskNo, string? LineType, decimal LineAmountLcy);
 
@@ -127,6 +130,37 @@ public class D365BcClient(HttpClient http)
                 + $"/companies({s.CompanyId})/projects({jobId})";
         var body = await GetAsync(url, token, "ดึงชื่อ Project", ct);
         return ReadString(body, "displayName") ?? ReadString(body, "name");
+    }
+
+    /// <summary>
+    /// Projects — the standard projects(v2.0) entity set (BC Jobs). Pulls number → displayName
+    /// (the job name), following @odata.nextLink. Used to label timesheet lines with their job name
+    /// even when the job has no local Project master.
+    /// </summary>
+    public async Task<List<D365ProjectName>> GetProjectsAsync(D365BcSetting s, string token, CancellationToken ct)
+    {
+        var names = new List<D365ProjectName>();
+        var url = $"{BaseUrl}/v2.0/{s.TenantId}/{s.EnvironmentId}/api/v2.0"
+                + $"/companies({s.CompanyId})/projects?$select=number,displayName";
+
+        while (!string.IsNullOrEmpty(url))
+        {
+            var body = await GetAsync(url, token, "ดึงชื่อ Project", ct);
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("value", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in arr.EnumerateArray())
+                {
+                    var number = FirstString(el, "number", "no", "No");
+                    if (string.IsNullOrWhiteSpace(number)) continue;
+                    names.Add(new D365ProjectName(number!, FirstString(el, "displayName", "name", "description")));
+                }
+            }
+            url = root.TryGetProperty("@odata.nextLink", out var next) && next.ValueKind == JsonValueKind.String
+                ? next.GetString() : null;
+        }
+        return names;
     }
 
     /// <summary>
