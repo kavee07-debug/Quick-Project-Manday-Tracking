@@ -75,6 +75,11 @@ export function AppLayout() {
           <NavLink to="/resource-timeline" className={navItem} title="Resource Timeline">
             <ClockIcon size={20} /> <span className="sidebar__label">Resource Timeline</span>
           </NavLink>
+          {hasRole('Admin', 'ProjectManager') && (
+            <NavLink to="/revenue-monthly" className={navItem} title="Revenue Monthly">
+              <ChartIcon size={20} /> <span className="sidebar__label">Revenue Monthly</span>
+            </NavLink>
+          )}
           {hasRole('Admin', 'ProjectManager', 'User') && (
             <NavLink to="/meeting-record" className={navItem} title="Meeting Record">
               <ClockIcon size={20} /> <span className="sidebar__label">Meeting Record</span>

@@ -12,6 +12,8 @@ USE QtmManday;
 GO
 
 /* ---------- Drop in dependency order (for re-runs) ---------- */
+IF OBJECT_ID(N'dbo.RevenueMonthSnapshot', N'U') IS NOT NULL DROP TABLE dbo.RevenueMonthSnapshot;  -- FK -> RevenueMonth
+IF OBJECT_ID(N'dbo.RevenueMonth', N'U')  IS NOT NULL DROP TABLE dbo.RevenueMonth;
 IF OBJECT_ID(N'dbo.MeetingLine', N'U')  IS NOT NULL DROP TABLE dbo.MeetingLine;   -- FK -> MeetingRecord, Project
 IF OBJECT_ID(N'dbo.MeetingRecord', N'U') IS NOT NULL DROP TABLE dbo.MeetingRecord;
 IF OBJECT_ID(N'dbo.MeetingSetting', N'U') IS NOT NULL DROP TABLE dbo.MeetingSetting;
@@ -351,6 +353,58 @@ CREATE TABLE dbo.D365TimesheetStaging (
     UpdatedAt       DATETIME2(0)  NULL,
     CONSTRAINT UQ_D365TimesheetStaging_SystemId UNIQUE (SystemId)
 );
+GO
+
+/* ============================================================
+   Revenue Monthly — recognise revenue from the month-over-month
+   progress delta of the QERP "Standard Progress vs Actual
+   Progress Summary" report. Deliberately NOT linked to dbo.Project:
+   the report carries jobs that do not exist in the project master.
+   ============================================================ */
+CREATE TABLE dbo.RevenueMonth (
+    RevenueMonthId INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_RevenueMonth PRIMARY KEY,
+    PeriodYear     INT NOT NULL,
+    PeriodMonth    INT NOT NULL,
+    Note           NVARCHAR(300) NULL,
+    -- "Prev" = snapshot as of the end of the previous month, "Curr" = end of this month.
+    PrevFileName   NVARCHAR(260) NULL,
+    PrevReportInfo NVARCHAR(500) NULL,        -- the "Report : ..." filter line from the sheet
+    PrevImportedAt DATETIME2(0)  NULL,
+    PrevJobCount   INT NOT NULL CONSTRAINT DF_RevenueMonth_PrevJobCount DEFAULT (0),
+    CurrFileName   NVARCHAR(260) NULL,
+    CurrReportInfo NVARCHAR(500) NULL,
+    CurrImportedAt DATETIME2(0)  NULL,
+    CurrJobCount   INT NOT NULL CONSTRAINT DF_RevenueMonth_CurrJobCount DEFAULT (0),
+    CreatedAt      DATETIME2(0) NOT NULL CONSTRAINT DF_RevenueMonth_CreatedAt DEFAULT (SYSUTCDATETIME()),
+    UpdatedAt      DATETIME2(0) NULL,
+    CONSTRAINT UQ_RevenueMonth_Period UNIQUE (PeriodYear, PeriodMonth),
+    CONSTRAINT CK_RevenueMonth_Month  CHECK (PeriodMonth BETWEEN 1 AND 12)
+);
+GO
+
+CREATE TABLE dbo.RevenueMonthSnapshot (
+    RevenueSnapshotId INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_RevenueMonthSnapshot PRIMARY KEY,
+    RevenueMonthId  INT NOT NULL,
+    Side            NVARCHAR(4)  NOT NULL,     -- Prev | Curr
+    JobNo           NVARCHAR(50) NOT NULL,
+    JobName         NVARCHAR(300) NULL,
+    Customer        NVARCHAR(300) NULL,
+    Pm              NVARCHAR(200) NULL,
+    StdGroup        NVARCHAR(50)  NULL,        -- "Std. Progress" group code, e.g. CUT-MANUAL
+    Stage           NVARCHAR(100) NULL,        -- "Progress" stage text, e.g. Sign go live
+    Revenue         DECIMAL(18,2) NULL,        -- project value from the report
+    ProgressStd     DECIMAL(9,4)  NULL,        -- "% Progress by Std." (0..100)
+    ProgressAct     DECIMAL(9,4)  NULL,        -- "% Progress by Act. Time sheet" (0..100)
+    RevenueProgress DECIMAL(18,2) NULL,        -- report's own recognised-to-date amount
+    MergedRowCount  INT NOT NULL CONSTRAINT DF_RevenueMonthSnapshot_Merged DEFAULT (1),
+    CreatedAt       DATETIME2(0) NOT NULL CONSTRAINT DF_RevenueMonthSnapshot_CreatedAt DEFAULT (SYSUTCDATETIME()),
+    CONSTRAINT FK_RevenueMonthSnapshot_Month FOREIGN KEY (RevenueMonthId)
+        REFERENCES dbo.RevenueMonth(RevenueMonthId) ON DELETE CASCADE,
+    CONSTRAINT UQ_RevenueMonthSnapshot_Job UNIQUE (RevenueMonthId, Side, JobNo),
+    CONSTRAINT CK_RevenueMonthSnapshot_Side CHECK (Side IN (N'Prev', N'Curr'))
+);
+GO
+CREATE INDEX IX_RevenueMonthSnapshot_MonthSide ON dbo.RevenueMonthSnapshot(RevenueMonthId, Side);
 GO
 
 /* ============================================================

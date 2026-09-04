@@ -37,6 +37,8 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
     public DbSet<MeetingRecord> Meetings => Set<MeetingRecord>();
     public DbSet<MeetingLine> MeetingLines => Set<MeetingLine>();
     public DbSet<MeetingSetting> MeetingSettings => Set<MeetingSetting>();
+    public DbSet<RevenueMonth> RevenueMonths => Set<RevenueMonth>();
+    public DbSet<RevenueMonthSnapshot> RevenueMonthSnapshots => Set<RevenueMonthSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -262,6 +264,39 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.DefaultPreparedBy).HasMaxLength(200);
+        });
+
+        b.Entity<RevenueMonth>(e =>
+        {
+            e.ToTable("RevenueMonth");
+            e.HasKey(x => x.RevenueMonthId);
+            e.Property(x => x.Note).HasMaxLength(300);
+            e.Property(x => x.PrevFileName).HasMaxLength(260);
+            e.Property(x => x.CurrFileName).HasMaxLength(260);
+            e.Property(x => x.PrevReportInfo).HasMaxLength(500);
+            e.Property(x => x.CurrReportInfo).HasMaxLength(500);
+            e.HasIndex(x => new { x.PeriodYear, x.PeriodMonth }).IsUnique();
+        });
+
+        b.Entity<RevenueMonthSnapshot>(e =>
+        {
+            e.ToTable("RevenueMonthSnapshot");
+            e.HasKey(x => x.RevenueSnapshotId);
+            e.Property(x => x.Side).HasMaxLength(4);
+            e.Property(x => x.JobNo).HasMaxLength(50);
+            e.Property(x => x.JobName).HasMaxLength(300);
+            e.Property(x => x.Customer).HasMaxLength(300);
+            e.Property(x => x.Pm).HasMaxLength(200);
+            e.Property(x => x.StdGroup).HasMaxLength(50);
+            e.Property(x => x.Stage).HasMaxLength(100);
+            e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
+            e.Property(x => x.RevenueProgress).HasColumnType("decimal(18,2)");
+            e.Property(x => x.ProgressStd).HasColumnType("decimal(9,4)");
+            e.Property(x => x.ProgressAct).HasColumnType("decimal(9,4)");
+            e.HasIndex(x => new { x.RevenueMonthId, x.Side, x.JobNo }).IsUnique();
+            e.HasOne(x => x.Month)
+                .WithMany(m => m.Snapshots)
+                .HasForeignKey(x => x.RevenueMonthId);
         });
     }
 }

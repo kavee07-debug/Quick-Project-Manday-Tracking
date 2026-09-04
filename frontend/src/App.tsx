@@ -8,6 +8,8 @@ import ProjectDetailPage from './pages/ProjectDetailPage';
 import MandaySummaryPage from './pages/MandaySummaryPage';
 import ResourceMandaySummaryPage from './pages/ResourceMandaySummaryPage';
 import ResourceTimelinePage from './pages/ResourceTimelinePage';
+import RevenueMonthlyListPage from './pages/RevenueMonthlyListPage';
+import RevenueMonthlyDetailPage from './pages/RevenueMonthlyDetailPage';
 import MeetingListPage from './pages/MeetingListPage';
 import MeetingDetailPage from './pages/MeetingDetailPage';
 import MeetingPrintPage from './pages/MeetingPrintPage';
@@ -46,6 +48,8 @@ export default function App() {
         <Route path="/manday-summary" element={<MandaySummaryPage />} />
         <Route path="/resource-manday-summary" element={<ResourceMandaySummaryPage />} />
         <Route path="/resource-timeline" element={<ResourceTimelinePage />} />
+        <Route path="/revenue-monthly" element={<RevenueMonthlyListPage />} />
+        <Route path="/revenue-monthly/:id" element={<RevenueMonthlyDetailPage />} />
         <Route path="/meeting-record" element={<MeetingListPage />} />
         <Route path="/meeting-record/:id" element={<MeetingDetailPage />} />
         <Route path="/resources" element={<ResourcePage />} />

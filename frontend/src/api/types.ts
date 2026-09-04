@@ -379,6 +379,51 @@ export interface ResourceTimelineRow {
   blocks: ResourceTimelineBlock[];
 }
 
+// ---- Revenue Monthly ----
+export interface RevenueMonth {
+  revenueMonthId: number;
+  periodYear: number;
+  periodMonth: number;
+  note?: string | null;
+  prevFileName?: string | null;
+  prevReportInfo?: string | null;
+  prevImportedAt?: string | null;
+  prevJobCount: number;
+  currFileName?: string | null;
+  currReportInfo?: string | null;
+  currImportedAt?: string | null;
+  currJobCount: number;
+  jobCount: number;
+  totalAmountStd: number;
+  totalAmountAct: number;
+}
+export interface RevenueMonthCreate {
+  periodYear: number;
+  periodMonth: number;
+  note?: string | null;
+}
+/** Status of a job across the two snapshots. */
+export type RevenueLineStatus = 'New' | 'Gone' | 'Normal';
+export interface RevenueMonthLine {
+  jobNo: string;
+  jobName?: string | null;
+  customer?: string | null;
+  pm?: string | null;
+  stdGroup?: string | null;
+  stage?: string | null;
+  revenue?: number | null;      // project value used as the base (current month wins)
+  prevRevenue?: number | null;
+  revenueChanged: boolean;
+  prevStd: number; currStd: number; deltaStd: number; amountStd: number;
+  prevAct: number; currAct: number; deltaAct: number; amountAct: number;
+  status: RevenueLineStatus;
+  mergedRowCount: number;
+}
+export interface RevenueMonthDetail {
+  month: RevenueMonth;
+  lines: RevenueMonthLine[];
+}
+
 export interface TaskSummary {
   taskId: number;
   taskName: string;

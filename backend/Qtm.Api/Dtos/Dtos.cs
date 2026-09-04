@@ -58,6 +58,19 @@ public record ResourceTimelineBlock(string ProjectCode, string ProjectName, bool
 public record ResourceTimelineRow(int ResourceId, string Code, string Name, string Position,
     decimal TotalRemaining, DateOnly? FirstStart, DateOnly? LastEnd, ResourceTimelineBlock[] Blocks);
 
+// ---- Revenue Monthly (recognise revenue from the month-over-month progress delta) ----
+public record RevenueMonthDto(int RevenueMonthId, int PeriodYear, int PeriodMonth, string? Note,
+    string? PrevFileName, string? PrevReportInfo, DateTime? PrevImportedAt, int PrevJobCount,
+    string? CurrFileName, string? CurrReportInfo, DateTime? CurrImportedAt, int CurrJobCount,
+    int JobCount, decimal TotalAmountStd, decimal TotalAmountAct);
+public record RevenueMonthCreate(int PeriodYear, int PeriodMonth, string? Note);
+public record RevenueMonthLineDto(string JobNo, string? JobName, string? Customer, string? Pm,
+    string? StdGroup, string? Stage, decimal? Revenue, decimal? PrevRevenue, bool RevenueChanged,
+    decimal PrevStd, decimal CurrStd, decimal DeltaStd, decimal AmountStd,
+    decimal PrevAct, decimal CurrAct, decimal DeltaAct, decimal AmountAct,
+    string Status, int MergedRowCount);
+public record RevenueMonthDetailDto(RevenueMonthDto Month, RevenueMonthLineDto[] Lines);
+
 // ---- User management (Admin) ----
 public record UserDto(int UserId, string Email, string DisplayName, bool IsActive, string[] Roles);
 public record UserUpsert(string Email, string DisplayName, bool IsActive, string[] Roles);
