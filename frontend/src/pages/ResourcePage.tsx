@@ -4,6 +4,7 @@ import { RESOURCE_POSITIONS, type Resource, type ResourceUpsert } from '../api/t
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../components/Modal';
 import { PositionBadge } from '../components/PositionBadge';
+import { RefreshButton } from '../components/RefreshButton';
 import './ResourcePage.scss';
 
 const empty: ResourceUpsert = { code: '', name: '', position: '', isActive: true };
@@ -77,9 +78,12 @@ export default function ResourcePage() {
     <div className="resources">
       <div className="resources__head">
         <h1>Master Resource</h1>
-        {isManager && (
-          <button className="btn btn--primary" onClick={openCreate}>+ เพิ่ม Resource</button>
-        )}
+        <div className="head-actions">
+          <RefreshButton onRefresh={load} />
+          {isManager && (
+            <button className="btn btn--primary" onClick={openCreate}>+ เพิ่ม Resource</button>
+          )}
+        </div>
       </div>
 
       {error && <p className="error-text">{error}</p>}

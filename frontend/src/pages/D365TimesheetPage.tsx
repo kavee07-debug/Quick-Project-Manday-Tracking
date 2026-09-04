@@ -11,6 +11,7 @@ import type {
 } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../components/Modal';
+import { RefreshButton } from '../components/RefreshButton';
 import './D365JobPage.scss';
 
 function fmt(n: number | null | undefined, digits = 2) {
@@ -243,6 +244,7 @@ export default function D365TimesheetPage() {
       <div className="d365job__head">
         <h1>Timesheet — ดึงจาก D365BC</h1>
         <div className="d365job__actions">
+          <RefreshButton onRefresh={load} />
           <label className="d365job__toggle">
             Start
             <input className="input" type="date" value={startDate} max={endDate || undefined}

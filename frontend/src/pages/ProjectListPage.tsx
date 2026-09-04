@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import {
   PROJECT_STATUSES,
@@ -13,6 +13,7 @@ import { Modal } from '../components/Modal';
 import { ProjectFormFields } from '../components/ProjectFormFields';
 import { ImportExportBar } from '../components/ImportExportBar';
 import { ProgressBar } from '../components/ProgressBar';
+import { RefreshButton } from '../components/RefreshButton';
 import { StatusBadge } from '../components/StatusBadge';
 import './ProjectListPage.scss';
 
@@ -99,7 +100,6 @@ const empty: ProjectUpsert = {
 
 export default function ProjectListPage() {
   const { isManager } = useAuth();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const rawQuery = searchParams.get('q') ?? '';
   const query = rawQuery.trim().toLowerCase();
@@ -301,11 +301,14 @@ export default function ProjectListPage() {
     <div className="projects">
       <div className="projects__head">
         <h1>Projects{query && <span className="muted"> · ค้นหา “{query}”</span>}</h1>
-        {isManager && (
-          <button className="btn btn--primary" onClick={openCreate}>
-            {newProjectLabel}
-          </button>
-        )}
+        <div className="head-actions">
+          <RefreshButton onRefresh={load} />
+          {isManager && (
+            <button className="btn btn--primary" onClick={openCreate}>
+              {newProjectLabel}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="kpi-grid projects__kpi">
@@ -428,9 +431,8 @@ export default function ProjectListPage() {
               paged.map((p) => (
                 <tr key={p.projectId}>
                   <td className="nowrap">
-                    <a onClick={() => navigate(`/projects/${p.projectId}`)} style={{ cursor: 'pointer' }}>
-                      {p.code}
-                    </a>
+                    {/* real <a href> so Ctrl/middle/right-click can open the project in a new tab */}
+                    <Link to={`/projects/${p.projectId}`}>{p.code}</Link>
                     {p.type === 'MA' ? (
                       <span className="badge badge--green" style={{ marginLeft: 'var(--space-2)' }}
                         title="โปรเจกต์ประเภท MA — ไม่กำหนด Budget/Adjust">MA</span>

@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../components/Modal';
 import { MeetingHeaderFields } from '../components/MeetingHeaderFields';
 import { StatusBadge } from '../components/StatusBadge';
+import { RefreshButton } from '../components/RefreshButton';
 import './MeetingPage.scss';
 
 const emptyForm = (): MeetingRecordUpsert => ({
@@ -343,7 +344,8 @@ export default function MeetingDetailPage() {
           {meeting.topic}
           {closed && <span className="badge badge--green" style={{ marginLeft: 'var(--space-3)', verticalAlign: 'middle' }}>ปิดแล้ว</span>}
         </h1>
-        <span style={{ display: 'inline-flex', gap: 'var(--space-2)' }}>
+        <span className="head-actions">
+          <RefreshButton onRefresh={loadAll} />
           <button className="btn btn--sm" onClick={() => navigate(`/meeting-record/${meetingId}/print`)}>🖨 พิมพ์รายงาน</button>
           {!closed && <button className="btn btn--sm" onClick={openEdit}>แก้ไขหัวข้อ</button>}
           {isManager && (closed

@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { ImportExportBar } from '../components/ImportExportBar';
 import { ProgressBar } from '../components/ProgressBar';
 import { StatusBadge } from '../components/StatusBadge';
+import { RefreshButton } from '../components/RefreshButton';
 import './ProjectListPage.scss';
 
 /**
@@ -37,6 +38,7 @@ export default function ProgressUpdatePage() {
     <div className="projects">
       <div className="projects__head">
         <h1>อัพเดท Progress</h1>
+        <RefreshButton onRefresh={load} />
       </div>
 
       <p className="muted" style={{ marginBottom: 'var(--space-4)' }}>

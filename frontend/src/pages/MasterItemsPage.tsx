@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import type { MasterItem, MasterItemFetchResult } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { RefreshButton } from '../components/RefreshButton';
 import './ResourcePage.scss';
 
 export default function MasterItemsPage() {
@@ -67,11 +68,14 @@ export default function MasterItemsPage() {
     <div className="resources">
       <div className="resources__head">
         <h1>Master Item</h1>
-        {isAdmin && (
-          <button className="btn btn--primary" onClick={fetchFromBc} disabled={busy}>
-            ⬇ ดึงจาก D365BC
-          </button>
-        )}
+        <div className="head-actions">
+          <RefreshButton onRefresh={load} />
+          {isAdmin && (
+            <button className="btn btn--primary" onClick={fetchFromBc} disabled={busy}>
+              ⬇ ดึงจาก D365BC
+            </button>
+          )}
+        </div>
       </div>
 
       <p className="muted" style={{ marginTop: 0 }}>

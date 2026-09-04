@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { PROJECT_STATUSES, PROJECT_TYPES, type MandayBreakdownRow, type MandaySummaryRow, type Project } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
@@ -6,6 +6,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { PivotSummaryTable, type ExplainCtx, type PivotRow } from '../components/PivotSummaryTable';
 import { JobFilter } from '../components/JobFilter';
 import { BreakdownTable } from '../components/BreakdownTable';
+import { RefreshButton } from '../components/RefreshButton';
 import './MandaySummaryPage.scss';
 
 const STATUS_CHIP: Record<string, string> = {
@@ -27,9 +28,6 @@ export default function MandaySummaryPage() {
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    api.get<Project[]>('/projects').then(setProjects).catch(() => {/* counts are best-effort */});
-  }, []);
   const statusCounts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const s of PROJECT_STATUSES) c[s] = 0;
@@ -52,15 +50,27 @@ export default function MandaySummaryPage() {
     return s ? `?${s}` : '';
   }, [statusFilter, typeFilter, jobFilter]);
 
-  useEffect(() => {
-    Promise.all([
-      api.get<MandaySummaryRow[]>(`/manday-summary${qs}`),
-      api.get<MandayBreakdownRow[]>(`/manday-summary/breakdown${qs}`),
-    ])
-      .then(([r, b]) => { setRows(r); setBreakdown(b); setError(null); })
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'โหลดข้อมูลไม่สำเร็จ'))
-      .finally(() => setLoading(false));
+  // Kept as a callable so the Refresh button can re-run the very same query (current filters).
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [r, b] = await Promise.all([
+        api.get<MandaySummaryRow[]>(`/manday-summary${qs}`),
+        api.get<MandayBreakdownRow[]>(`/manday-summary/breakdown${qs}`),
+      ]);
+      setRows(r);
+      setBreakdown(b);
+      setError(null);
+      // Project list only feeds the filter-chip counts — a failure there must not blank the page.
+      api.get<Project[]>('/projects').then(setProjects).catch(() => {/* counts are best-effort */});
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'โหลดข้อมูลไม่สำเร็จ');
+    } finally {
+      setLoading(false);
+    }
   }, [qs]);
+
+  useEffect(() => { load(); }, [load]);
 
   function toggle(setFilter: typeof setStatusFilter, value: string) {
     setFilter((cur) => {
@@ -98,7 +108,10 @@ export default function MandaySummaryPage() {
 
   return (
     <div className="msummary">
-      <h1 className="msummary__title">Manday Summary</h1>
+      <div className="section-head">
+        <h1 className="msummary__title">Manday Summary</h1>
+        <RefreshButton onRefresh={load} />
+      </div>
       <p className="muted msummary__hint">
         สรุป manday แยกตามตำแหน่ง (Position) ของ resource ต่อโปรเจกต์ · Remaining = (Budget+Adjust) − Actual · คลิกที่ยอดเพื่อดูที่มา
       </p>

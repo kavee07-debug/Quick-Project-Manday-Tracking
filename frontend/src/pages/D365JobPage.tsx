@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client';
 import { PROJECT_TYPES, type CreateProjectsResult, type D365FetchResult, type D365StagingRow } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../components/Modal';
+import { RefreshButton } from '../components/RefreshButton';
 import './D365JobPage.scss';
 
 export default function D365JobPage() {
@@ -242,6 +243,7 @@ export default function D365JobPage() {
       <div className="d365job__head">
         <h1>API Job — ดึง Project จาก D365BC</h1>
         <div className="d365job__actions">
+          <RefreshButton onRefresh={load} />
           <button className="btn btn--primary" onClick={fetchFromBc} disabled={busy}>
             ⬇ ดึงข้อมูลจาก D365BC
           </button>

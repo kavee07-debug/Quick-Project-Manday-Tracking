@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
 import type { DbConfig, DbConfigUpsert, DbTestResult } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { RefreshButton } from '../components/RefreshButton';
 import './ConfigPage.scss';
 
 const blank: DbConfigUpsert = {
@@ -26,28 +27,35 @@ export default function ConfigPage() {
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  // Re-reads the stored settings. Refresh re-runs this, so unsaved edits in the form are
+  // replaced by whatever is on the server (another admin may have changed it).
+  const load = useCallback(async () => {
     if (!isAdmin) {
       setLoading(false);
       return;
     }
-    api
-      .get<DbConfig>('/config/db')
-      .then((c) => {
-        setForm({
-          server: c.server,
-          database: c.database,
-          integratedSecurity: c.integratedSecurity,
-          username: c.username ?? '',
-          password: '', // never returned; leave blank to keep existing
-          trustServerCertificate: c.trustServerCertificate,
-          encrypt: c.encrypt,
-        });
-        setHasPassword(c.hasPassword);
-      })
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'โหลด config ไม่สำเร็จ'))
-      .finally(() => setLoading(false));
+    setLoading(true);
+    try {
+      const c = await api.get<DbConfig>('/config/db');
+      setForm({
+        server: c.server,
+        database: c.database,
+        integratedSecurity: c.integratedSecurity,
+        username: c.username ?? '',
+        password: '', // never returned; leave blank to keep existing
+        trustServerCertificate: c.trustServerCertificate,
+        encrypt: c.encrypt,
+      });
+      setHasPassword(c.hasPassword);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'โหลด config ไม่สำเร็จ');
+    } finally {
+      setLoading(false);
+    }
   }, [isAdmin]);
+
+  useEffect(() => { load(); }, [load]);
 
   function update<K extends keyof DbConfigUpsert>(key: K, value: DbConfigUpsert[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -92,7 +100,10 @@ export default function ConfigPage() {
 
   return (
     <div className="config">
-      <h1 className="config__title">ตั้งค่าฐานข้อมูล (Config)</h1>
+      <div className="section-head">
+        <h1 className="config__title">ตั้งค่าฐานข้อมูล (Config)</h1>
+        {isAdmin && <RefreshButton onRefresh={load} />}
+      </div>
       <p className="muted config__hint">
         ตั้งค่า connection ของ SQL Server. การบันทึกจะมีผลกับการเชื่อมต่อครั้งถัดไปทันที
         (ไม่ต้องรีสตาร์ท). หลังเปลี่ยนไป server ใหม่ อย่าลืมรัน <code>db/schema.sql</code> บนเซิร์ฟเวอร์นั้นก่อน.

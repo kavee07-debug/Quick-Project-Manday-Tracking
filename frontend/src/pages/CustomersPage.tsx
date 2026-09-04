@@ -4,6 +4,7 @@ import type { Customer, CustomerUpsert } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../components/Modal';
 import { ImportExportBar } from '../components/ImportExportBar';
+import { RefreshButton } from '../components/RefreshButton';
 import './ResourcePage.scss';
 
 const empty: CustomerUpsert = { code: '', name: '', isActive: true };
@@ -76,9 +77,12 @@ export default function CustomersPage() {
     <div className="resources">
       <div className="resources__head">
         <h1>Master Customer</h1>
-        {isManager && (
-          <button className="btn btn--primary" onClick={openCreate}>+ เพิ่มลูกค้า</button>
-        )}
+        <div className="head-actions">
+          <RefreshButton onRefresh={load} />
+          {isManager && (
+            <button className="btn btn--primary" onClick={openCreate}>+ เพิ่มลูกค้า</button>
+          )}
+        </div>
       </div>
 
       <div style={{ marginBottom: 'var(--space-4)' }}>

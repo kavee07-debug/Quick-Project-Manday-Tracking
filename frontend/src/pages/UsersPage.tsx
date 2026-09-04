@@ -4,6 +4,7 @@ import { ROLES, type User, type UserUpsert } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../components/Modal';
 import { RoleBadge } from '../components/RoleBadge';
+import { RefreshButton } from '../components/RefreshButton';
 import './ResourcePage.scss';
 
 const empty: UserUpsert = { email: '', displayName: '', isActive: true, roles: ['User'] };
@@ -91,7 +92,10 @@ export default function UsersPage() {
     <div className="resources">
       <div className="resources__head">
         <h1>จัดการผู้ใช้</h1>
-        <button className="btn btn--primary" onClick={openCreate}>+ เพิ่มผู้ใช้</button>
+        <div className="head-actions">
+          <RefreshButton onRefresh={load} />
+          <button className="btn btn--primary" onClick={openCreate}>+ เพิ่มผู้ใช้</button>
+        </div>
       </div>
 
       {error && <p className="error-text">{error}</p>}

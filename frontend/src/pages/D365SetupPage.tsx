@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
 import type { D365Setting, D365SettingUpsert, D365TestResult } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { RefreshButton } from '../components/RefreshButton';
 import './ConfigPage.scss';
 
 const blank: D365SettingUpsert = {
@@ -28,30 +29,37 @@ export default function D365SetupPage() {
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  // Re-reads the stored settings. Refresh re-runs this, so unsaved edits in the form are
+  // replaced by whatever is on the server (another admin may have changed it).
+  const load = useCallback(async () => {
     if (!isAdmin) {
       setLoading(false);
       return;
     }
-    api
-      .get<D365Setting>('/d365/settings')
-      .then((s) => {
-        setForm({
-          tenantId: s.tenantId,
-          environmentId: s.environmentId,
-          companyId: s.companyId,
-          clientId: s.clientId,
-          clientSecret: '', // never returned; leave blank to keep existing
-          apiPublisher: s.apiPublisher,
-          apiGroup: s.apiGroup,
-          apiVersion: s.apiVersion || 'v1.0',
-          projectManagerCodes: s.projectManagerCodes,
-        });
-        setHasSecret(s.hasClientSecret);
-      })
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'โหลดค่าไม่สำเร็จ'))
-      .finally(() => setLoading(false));
+    setLoading(true);
+    try {
+      const s = await api.get<D365Setting>('/d365/settings');
+      setForm({
+        tenantId: s.tenantId,
+        environmentId: s.environmentId,
+        companyId: s.companyId,
+        clientId: s.clientId,
+        clientSecret: '', // never returned; leave blank to keep existing
+        apiPublisher: s.apiPublisher,
+        apiGroup: s.apiGroup,
+        apiVersion: s.apiVersion || 'v1.0',
+        projectManagerCodes: s.projectManagerCodes,
+      });
+      setHasSecret(s.hasClientSecret);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'โหลดค่าไม่สำเร็จ');
+    } finally {
+      setLoading(false);
+    }
   }, [isAdmin]);
+
+  useEffect(() => { load(); }, [load]);
 
   function update<K extends keyof D365SettingUpsert>(key: K, value: D365SettingUpsert[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -94,7 +102,10 @@ export default function D365SetupPage() {
 
   return (
     <div className="config">
-      <h1 className="config__title">ตั้งค่าเชื่อมต่อ D365BC (API)</h1>
+      <div className="section-head">
+        <h1 className="config__title">ตั้งค่าเชื่อมต่อ D365BC (API)</h1>
+        {isAdmin && <RefreshButton onRefresh={load} />}
+      </div>
       <p className="muted config__hint">
         ค่าเชื่อมต่อ Business Central สำหรับดึงข้อมูล Project (เมนู <code>API Job</code>).
         Client Secret จะไม่ถูกส่งกลับมาแสดง — เว้นว่างไว้เพื่อใช้ค่าเดิม.

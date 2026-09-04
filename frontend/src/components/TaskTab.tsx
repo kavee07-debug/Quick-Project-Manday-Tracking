@@ -8,7 +8,8 @@ import { TaskStatusBadge } from './TaskStatusBadge';
 
 const empty: TaskUpsert = { name: '', description: '', status: 'Open', sortOrder: 0 };
 
-export function TaskTab({ projectId }: { projectId: number }) {
+/** `reloadKey` lets the page's Refresh button re-fetch without remounting (local UI state is kept). */
+export function TaskTab({ projectId, reloadKey }: { projectId: number; reloadKey?: number }) {
   const { isManager } = useAuth();
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -18,13 +19,14 @@ export function TaskTab({ projectId }: { projectId: number }) {
   const [formError, setFormError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    void reloadKey;                       // bumped by the page's Refresh button
     try {
       setTasks(await api.get<TaskItem[]>(`/projects/${projectId}/tasks`));
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'โหลด task ไม่สำเร็จ');
     }
-  }, [projectId]);
+  }, [projectId, reloadKey]);
 
   useEffect(() => {
     load();

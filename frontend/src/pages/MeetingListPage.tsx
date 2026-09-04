@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import type { MeetingRecord, MeetingRecordUpsert, MeetingSetting, Resource } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../components/Modal';
 import { MeetingHeaderFields } from '../components/MeetingHeaderFields';
+import { RefreshButton } from '../components/RefreshButton';
 import './MeetingPage.scss';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -103,10 +104,11 @@ export default function MeetingListPage() {
     <div className="meeting">
       <div className="section-head">
         <h1 className="meeting__title">Meeting Record</h1>
-        <span style={{ display: 'inline-flex', gap: 'var(--space-2)' }}>
+        <div className="head-actions">
+          <RefreshButton onRefresh={load} />
           <button className="btn btn--sm" onClick={openSetup}>⚙ ตั้งค่า Default</button>
           <button className="btn btn--primary" onClick={openCreate}>+ สร้างการประชุม</button>
-        </span>
+        </div>
       </div>
       <p className="muted meeting__hint">บันทึกการประชุม Update Project Status รายสัปดาห์</p>
 
@@ -130,9 +132,8 @@ export default function MeetingListPage() {
                 <tr key={m.meetingId}>
                   <td className="nowrap">{m.meetingDate}</td>
                   <td>
-                    <a style={{ cursor: 'pointer' }} onClick={() => navigate(`/meeting-record/${m.meetingId}`)}>
-                      {m.topic}
-                    </a>
+                    {/* real <a href> so Ctrl/middle/right-click can open the meeting in a new tab */}
+                    <Link to={`/meeting-record/${m.meetingId}`}>{m.topic}</Link>
                     {m.isClosed && <span className="badge badge--green" style={{ marginLeft: 'var(--space-2)' }}>ปิดแล้ว</span>}
                   </td>
                   <td className="num">{m.lineCount}</td>

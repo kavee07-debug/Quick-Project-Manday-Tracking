@@ -22,8 +22,9 @@ interface FormState extends MandayUpsert {
   taskId: number;
 }
 
-export function EstimateActualTab({ projectId, projectCode, projectRevenue, projectType }:
-  { projectId: number; projectCode: string; projectRevenue?: number | null; projectType?: string | null }) {
+/** `reloadKey` lets the page's Refresh button re-fetch without remounting (local UI state is kept). */
+export function EstimateActualTab({ projectId, projectCode, projectRevenue, projectType, reloadKey }:
+  { projectId: number; projectCode: string; projectRevenue?: number | null; projectType?: string | null; reloadKey?: number }) {
   const { isManager, hasRole } = useAuth();
   // MA projects don't plan mandays here — Budget/Adjust aren't set and Actuals come
   // from the D365 timesheet Apply, so the manual "+ เพิ่ม Manday" button is hidden.
@@ -48,6 +49,7 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue, proj
   );
 
   const load = useCallback(async () => {
+    void reloadKey;                       // bumped by the page's Refresh button
     try {
       const [t, r, s] = await Promise.all([
         api.get<TaskItem[]>(`/projects/${projectId}/tasks`),
@@ -66,7 +68,7 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue, proj
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'โหลดข้อมูลไม่สำเร็จ');
     }
-  }, [projectId]);
+  }, [projectId, reloadKey]);
 
   useEffect(() => {
     load();
