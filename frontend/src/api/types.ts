@@ -300,6 +300,13 @@ export interface D365TimesheetRow {
   alreadyInActual: boolean;
 }
 
+/** Same New Job / New Task applied to several staged timesheet rows at once. */
+export interface D365TimesheetBulkUpsert {
+  ids: number[];
+  newJobNo?: string | null;
+  newTaskNo?: string | null;
+}
+
 export interface D365TimesheetFetchResult {
   fetched: number;
   inserted: number;

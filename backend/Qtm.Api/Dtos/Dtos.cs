@@ -124,6 +124,8 @@ public record D365TimesheetRow(int Id, string SystemId, string? JobNo, string? J
     string? Comment, string? ProjectManager, string? TimesheetStatus,
     string? NewJobNo, string? NewTaskNo, string ValidateStatus, string ValidateNewStatus, bool AlreadyInActual);
 public record D365TimesheetUpsert(string? NewJobNo, string? NewTaskNo);
+// Same edit applied to several staged rows at once.
+public record D365TimesheetBulkUpsert(int[] Ids, string? NewJobNo, string? NewTaskNo);
 public record D365TimesheetFetchRequest(DateOnly StartDate, DateOnly EndDate);
 public record D365TimesheetFetchResult(int Fetched, int Inserted, int Updated, string Year, List<string> Errors);
 public record D365ApplyResult(int Applied, int Skipped, List<string> Errors);

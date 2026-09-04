@@ -38,17 +38,24 @@ export default function D365TimesheetPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const [editing, setEditing] = useState<D365TimesheetRow | null>(null);
+  const [bulkIds, setBulkIds] = useState<number[] | null>(null);   // non-null = editing many rows at once
   const [form, setForm] = useState({ newJobNo: '', newTaskNo: '' });
   const [editTasks, setEditTasks] = useState<TaskItem[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [jobQuery, setJobQuery] = useState('');   // search text for the New Job combobox
   const [jobOpen, setJobOpen] = useState(false);   // whether the combobox list is open
+  const [taskQuery, setTaskQuery] = useState(''); // search text for the New Task combobox
+  const [taskOpen, setTaskOpen] = useState(false);
 
-  async function load() {
+  /** `keepSelection` survives a reload that the user expects to act on the same rows again. */
+  async function load(keepSelection = false) {
     setLoading(true);
     try {
-      setRows(await api.get<D365TimesheetRow[]>('/d365/timesheet'));
-      setSelected(new Set());
+      const fresh = await api.get<D365TimesheetRow[]>('/d365/timesheet');
+      setRows(fresh);
+      setSelected((prev) => (keepSelection
+        ? new Set([...prev].filter((id) => fresh.some((r) => r.id === id)))   // drop rows that are gone
+        : new Set()));
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'โหลดข้อมูลไม่สำเร็จ');
@@ -103,6 +110,13 @@ export default function D365TimesheetPage() {
     return list.slice(0, 50);
   }, [projects, jobQuery]);
 
+  // Tasks of the chosen project filtered by the New Task combobox search (name or description).
+  const taskMatches = useMemo(() => {
+    const q = taskQuery.trim().toLowerCase();
+    if (!q) return editTasks;
+    return editTasks.filter((t) => `${t.name} ${t.description ?? ''}`.toLowerCase().includes(q));
+  }, [editTasks, taskQuery]);
+
   const allVisibleSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
   const someVisibleSelected = filtered.some((r) => selected.has(r.id));
 
@@ -154,30 +168,64 @@ export default function D365TimesheetPage() {
     catch { setEditTasks([]); }
   }
 
-  async function openEdit(row: D365TimesheetRow) {
-    setEditing(row);
-    setForm({ newJobNo: row.newJobNo ?? '', newTaskNo: row.newTaskNo ?? '' });
+  function resetEditForm(jobNo: string, taskNo: string) {
+    setForm({ newJobNo: jobNo, newTaskNo: taskNo });
     setFormError(null);
     setEditTasks([]);
     setJobQuery(''); setJobOpen(false);
+    setTaskQuery(''); setTaskOpen(false);
+  }
+
+  async function openEdit(row: D365TimesheetRow) {
+    setBulkIds(null);
+    setEditing(row);
+    resetEditForm(row.newJobNo ?? '', row.newTaskNo ?? '');
     if (row.newJobNo) await loadTasksForCode(row.newJobNo);
+  }
+
+  // Same dialog, applied to every selected row. Prefills only when the selection already agrees.
+  async function openBulkEdit() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    const picked = rows.filter((r) => selected.has(r.id));
+    const sharedJob = picked.every((r) => (r.newJobNo ?? '') === (picked[0].newJobNo ?? '')) ? picked[0].newJobNo ?? '' : '';
+    const sharedTask = sharedJob && picked.every((r) => (r.newTaskNo ?? '') === (picked[0].newTaskNo ?? '')) ? picked[0].newTaskNo ?? '' : '';
+    setEditing(null);
+    setBulkIds(ids);
+    resetEditForm(sharedJob, sharedTask);
+    if (sharedJob) await loadTasksForCode(sharedJob);
+  }
+
+  function closeEdit() {
+    setEditing(null);
+    setBulkIds(null);
   }
 
   // Pick a project from the searchable New Job combobox (empty = clear).
   function selectJob(code: string) {
     setForm({ newJobNo: code, newTaskNo: '' });
     setJobOpen(false); setJobQuery('');
+    setTaskQuery(''); setTaskOpen(false);
     if (code) loadTasksForCode(code); else setEditTasks([]);
+  }
+
+  // Pick a task from the searchable New Task combobox (empty = clear).
+  function selectTask(name: string) {
+    setForm((f) => ({ ...f, newTaskNo: name }));
+    setTaskOpen(false); setTaskQuery('');
   }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!editing) return;
     setFormError(null);
+    const payload = { newJobNo: form.newJobNo || null, newTaskNo: form.newTaskNo || null };
     try {
-      await api.put(`/d365/timesheet/${editing.id}`, { newJobNo: form.newJobNo || null, newTaskNo: form.newTaskNo || null });
-      setEditing(null);
-      await load();
+      const bulk = bulkIds !== null;
+      if (bulk) await api.post('/d365/timesheet/set-new', { ids: bulkIds, ...payload });
+      else if (editing) await api.put(`/d365/timesheet/${editing.id}`, payload);
+      else return;
+      closeEdit();
+      await load(bulk);   // keep the selection so the same rows can go straight to Apply
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : 'บันทึกไม่สำเร็จ');
     }
@@ -261,6 +309,10 @@ export default function D365TimesheetPage() {
           <button className="btn" onClick={autoMapSelected} disabled={busy || selected.size === 0}
             title="จับคู่ New Job No/Task จาก Projects timesheet mapping">
             🔗 Auto Map New Job ({selected.size})
+          </button>
+          <button className="btn" onClick={openBulkEdit} disabled={busy || selected.size === 0}
+            title="กำหนด New Job No / New Task เดียวกันให้ทุกรายการที่เลือก">
+            ✏ Change New Job/Task ({selected.size})
           </button>
           <button className="btn btn--primary" onClick={applySelected} disabled={busy || selected.size === 0}>
             ✓ Apply เป็น Actual ({selected.size})
@@ -408,10 +460,19 @@ export default function D365TimesheetPage() {
         </div>
       )}
 
-      {editing && (
-        <Modal title="แก้ไข New Job / New Task" onClose={() => setEditing(null)}>
+      {(editing || bulkIds) && (
+        <Modal
+          title={bulkIds ? `แก้ไข New Job / New Task (${bulkIds.length} รายการ)` : 'แก้ไข New Job / New Task'}
+          onClose={closeEdit}
+        >
           <form onSubmit={submit}>
-            <p className="muted">API: {editing.jobNo ?? '—'} / {editing.jobTaskNo ?? '—'}</p>
+            {bulkIds ? (
+              <p className="muted">
+                ค่าที่เลือกด้านล่างจะถูกกำหนดให้ <b>ทุกรายการที่เลือกไว้ ({bulkIds.length} รายการ)</b> ทับค่าเดิมทั้งหมด
+              </p>
+            ) : (
+              <p className="muted">API: {editing!.jobNo ?? '—'} / {editing!.jobTaskNo ?? '—'}</p>
+            )}
 
             <label className="field-label">New Job No (Project)</label>
             {(() => {
@@ -445,19 +506,36 @@ export default function D365TimesheetPage() {
             )}
 
             <label className="field-label">New Task No (Task)</label>
-            <select className="input" value={form.newTaskNo}
-              onChange={(e) => setForm({ ...form, newTaskNo: e.target.value })} disabled={!form.newJobNo}>
-              <option value="">— ไม่ระบุ —</option>
-              {/* Keep the current (possibly unknown) task value visible if it isn't in the loaded task list. */}
-              {form.newTaskNo && !editTasks.some((t) => t.name.toLowerCase() === form.newTaskNo.toLowerCase()) && (
-                <option value={form.newTaskNo}>{form.newTaskNo} (เดิม — ไม่พบในระบบ)</option>
-              )}
-              {editTasks.map((t) => (
-                <option key={t.taskId} value={t.name}>
-                  {t.name}{t.description ? ` — ${t.description}` : ''}
-                </option>
-              ))}
-            </select>
+            {(() => {
+              const sel = editTasks.find((t) => t.name.toLowerCase() === form.newTaskNo.toLowerCase());
+              const selLabel = !form.newTaskNo ? ''
+                : sel ? `${sel.name}${sel.description ? ` · ${sel.description}` : ''}`
+                : `${form.newTaskNo} (เดิม — ไม่พบในระบบ)`;
+              return (
+                <div className="d365job__combo">
+                  <input className="input"
+                    placeholder={form.newJobNo ? 'ค้นหา Task (ชื่อ หรือ คำอธิบาย)…' : 'เลือก New Job No ก่อน'}
+                    disabled={!form.newJobNo}
+                    value={taskOpen ? taskQuery : selLabel}
+                    onFocus={() => { setTaskOpen(true); setTaskQuery(''); }}
+                    onChange={(e) => { setTaskQuery(e.target.value); setTaskOpen(true); }}
+                    onBlur={() => setTimeout(() => setTaskOpen(false), 150)} />
+                  {taskOpen && (
+                    <ul className="d365job__combolist">
+                      <li className="muted" onMouseDown={() => selectTask('')}>— ไม่ระบุ —</li>
+                      {taskMatches.map((t) => (
+                        <li key={t.taskId} onMouseDown={() => selectTask(t.name)}>
+                          <b>{t.name}</b>{t.description ? ` · ${t.description}` : ''}
+                        </li>
+                      ))}
+                      {taskMatches.length === 0 && (
+                        <li className="muted">{editTasks.length === 0 ? 'Project นี้ยังไม่มี Task' : 'ไม่พบ Task ที่ค้นหา'}</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              );
+            })()}
             {/* Show the selected task's description under the dropdown. */}
             {(() => {
               const sel = editTasks.find((t) => t.name.toLowerCase() === form.newTaskNo.toLowerCase());
@@ -468,7 +546,7 @@ export default function D365TimesheetPage() {
 
             {formError && <p className="error-text">{formError}</p>}
             <div className="form-actions">
-              <button type="button" className="btn" onClick={() => setEditing(null)}>ยกเลิก</button>
+              <button type="button" className="btn" onClick={closeEdit}>ยกเลิก</button>
               <button type="submit" className="btn btn--primary">บันทึก</button>
             </div>
           </form>

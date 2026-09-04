@@ -92,6 +92,27 @@ public class D365TimesheetController(QtmDbContext db, D365TimesheetService times
         return NoContent();
     }
 
+    /// <summary>Applies one New Job / New Task to every selected staged row.</summary>
+    [HttpPost("set-new")]
+    public async Task<ActionResult<object>> SetNewForSelected(D365TimesheetBulkUpsert req, CancellationToken ct)
+    {
+        var ids = req.Ids ?? [];
+        if (ids.Length == 0) return Ok(new { updated = 0 });
+
+        var jobNo = string.IsNullOrWhiteSpace(req.NewJobNo) ? null : req.NewJobNo.Trim();
+        var taskNo = string.IsNullOrWhiteSpace(req.NewTaskNo) ? null : req.NewTaskNo.Trim();
+
+        var rows = await db.D365TimesheetStagings.Where(x => ids.Contains(x.TimesheetStagingId)).ToListAsync(ct);
+        foreach (var row in rows)
+        {
+            row.NewJobNo = jobNo;
+            row.NewTaskNo = taskNo;
+            row.UpdatedAt = DateTime.UtcNow;
+        }
+        await db.SaveChangesAsync(ct);
+        return Ok(new { updated = rows.Count });
+    }
+
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
