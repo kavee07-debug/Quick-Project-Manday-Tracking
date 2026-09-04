@@ -44,6 +44,10 @@ export function AppLayout() {
         <div className="topbar__spacer" />
 
         <div className="topbar__actions">
+          <span className={`topbar__env ${import.meta.env.DEV ? 'topbar__env--dev' : 'topbar__env--prod'}`}
+            title={import.meta.env.DEV ? 'รันบนเครื่อง Dev (Vite dev server)' : 'รันบน Production (build)'}>
+            {import.meta.env.DEV ? 'Develop' : 'Production'}
+          </span>
           <span className="topbar__user">
             <UserIcon size={18} />
             <span>

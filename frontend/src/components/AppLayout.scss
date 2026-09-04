@@ -79,6 +79,17 @@
     flex-shrink: 0;
     margin-left: auto;
   }
+  // Environment badge — red "Develop" on dev (Vite), green "Production" on a build.
+  &__env {
+    padding: 3px 12px;
+    border-radius: 999px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 0.02em;
+    color: #fff;
+    &--dev  { background: var(--color-danger); }
+    &--prod { background: var(--color-success); }
+  }
   &__user {
     display: flex;
     align-items: center;
