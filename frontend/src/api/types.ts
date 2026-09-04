@@ -356,6 +356,29 @@ export interface BreakdownRow {
 export interface MandayBreakdownRow extends BreakdownRow { projectId: number; }
 export interface ResourceBreakdownRow extends BreakdownRow { resourceId: number; }
 
+// ---- Resource Timeline (predictive per-resource schedule) ----
+export interface ResourceTimelineBlock {
+  projectCode: string;
+  projectName: string;
+  isZ: boolean;
+  taskName: string;
+  taskDescription?: string | null;
+  remainingManday: number;
+  workingDays: number;
+  startDate: string;   // yyyy-MM-dd
+  endDate: string;     // yyyy-MM-dd
+}
+export interface ResourceTimelineRow {
+  resourceId: number;
+  code: string;
+  name: string;
+  position: string;
+  totalRemaining: number;
+  firstStart?: string | null;
+  lastEnd?: string | null;
+  blocks: ResourceTimelineBlock[];
+}
+
 export interface TaskSummary {
   taskId: number;
   taskName: string;

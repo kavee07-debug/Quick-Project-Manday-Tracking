@@ -7,6 +7,7 @@ import ProjectListPage from './pages/ProjectListPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import MandaySummaryPage from './pages/MandaySummaryPage';
 import ResourceMandaySummaryPage from './pages/ResourceMandaySummaryPage';
+import ResourceTimelinePage from './pages/ResourceTimelinePage';
 import MeetingListPage from './pages/MeetingListPage';
 import MeetingDetailPage from './pages/MeetingDetailPage';
 import MeetingPrintPage from './pages/MeetingPrintPage';
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/projects/:id" element={<ProjectDetailPage />} />
         <Route path="/manday-summary" element={<MandaySummaryPage />} />
         <Route path="/resource-manday-summary" element={<ResourceMandaySummaryPage />} />
+        <Route path="/resource-timeline" element={<ResourceTimelinePage />} />
         <Route path="/meeting-record" element={<MeetingListPage />} />
         <Route path="/meeting-record/:id" element={<MeetingDetailPage />} />
         <Route path="/resources" element={<ResourcePage />} />

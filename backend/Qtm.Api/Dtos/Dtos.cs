@@ -52,6 +52,12 @@ public record MandayBreakdownRow(int ProjectId, string Position, string ProjectC
 public record ResourceBreakdownRow(int ResourceId, string Position, string ProjectCode, string ProjectName,
     string TaskName, string? TaskDescription, string EntryType, decimal Manday, string? Note);
 
+// ---- Resource Timeline (predictive per-resource schedule of remaining budgeted work) ----
+public record ResourceTimelineBlock(string ProjectCode, string ProjectName, bool IsZ, string TaskName,
+    string? TaskDescription, decimal RemainingManday, int WorkingDays, DateOnly StartDate, DateOnly EndDate);
+public record ResourceTimelineRow(int ResourceId, string Code, string Name, string Position,
+    decimal TotalRemaining, DateOnly? FirstStart, DateOnly? LastEnd, ResourceTimelineBlock[] Blocks);
+
 // ---- User management (Admin) ----
 public record UserDto(int UserId, string Email, string DisplayName, bool IsActive, string[] Roles);
 public record UserUpsert(string Email, string DisplayName, bool IsActive, string[] Roles);
