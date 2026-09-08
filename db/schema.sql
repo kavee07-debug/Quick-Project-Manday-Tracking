@@ -12,6 +12,7 @@ USE QtmManday;
 GO
 
 /* ---------- Drop in dependency order (for re-runs) ---------- */
+IF OBJECT_ID(N'dbo.RevenueMonthManualLine', N'U') IS NOT NULL DROP TABLE dbo.RevenueMonthManualLine;  -- FK -> RevenueMonth
 IF OBJECT_ID(N'dbo.RevenueMonthSnapshot', N'U') IS NOT NULL DROP TABLE dbo.RevenueMonthSnapshot;  -- FK -> RevenueMonth
 IF OBJECT_ID(N'dbo.RevenueMonth', N'U')  IS NOT NULL DROP TABLE dbo.RevenueMonth;
 IF OBJECT_ID(N'dbo.MeetingLine', N'U')  IS NOT NULL DROP TABLE dbo.MeetingLine;   -- FK -> MeetingRecord, Project
@@ -375,6 +376,7 @@ CREATE TABLE dbo.RevenueMonth (
     CurrReportInfo NVARCHAR(500) NULL,
     CurrImportedAt DATETIME2(0)  NULL,
     CurrJobCount   INT NOT NULL CONSTRAINT DF_RevenueMonth_CurrJobCount DEFAULT (0),
+    TargetAmount   DECIMAL(18,2) NULL,        -- revenue the month is aiming at
     -- Confirm = the month is closed: figures final, period read-only until reopened.
     -- Until then the screen labels the revenue "Est Revenue".
     IsConfirmed    BIT NOT NULL CONSTRAINT DF_RevenueMonth_IsConfirmed DEFAULT (0),
@@ -416,6 +418,31 @@ CREATE TABLE dbo.RevenueMonthSnapshot (
 );
 GO
 CREATE INDEX IX_RevenueMonthSnapshot_MonthSide ON dbo.RevenueMonthSnapshot(RevenueMonthId, Side);
+GO
+
+/* Jobs typed in by hand on the screen (mainly to estimate revenue the report does not
+   carry yet). Separate from the snapshots on purpose: re-importing either Excel file
+   must leave these rows alone. Amount, when filled in, wins over the % calculation. */
+CREATE TABLE dbo.RevenueMonthManualLine (
+    RevenueMonthManualLineId INT IDENTITY(1,1) NOT NULL
+        CONSTRAINT PK_RevenueMonthManualLine PRIMARY KEY,
+    RevenueMonthId INT NOT NULL,
+    JobNo          NVARCHAR(50)  NOT NULL,
+    JobName        NVARCHAR(300) NULL,
+    Customer       NVARCHAR(300) NULL,
+    Revenue        DECIMAL(18,2) NULL,       -- project value
+    PrevProgress   DECIMAL(9,4)  NULL,       -- % at the end of last month
+    CurrProgress   DECIMAL(9,4)  NULL,       -- % at the end of this month
+    Amount         DECIMAL(18,2) NULL,       -- typed straight in; wins over the % calc
+    Note           NVARCHAR(300) NULL,
+    CreatedAt      DATETIME2(0) NOT NULL
+        CONSTRAINT DF_RevenueMonthManualLine_CreatedAt DEFAULT (SYSUTCDATETIME()),
+    CreatedBy      NVARCHAR(200) NULL,
+    UpdatedAt      DATETIME2(0) NULL,
+    CONSTRAINT FK_RevenueMonthManualLine_Month FOREIGN KEY (RevenueMonthId)
+        REFERENCES dbo.RevenueMonth(RevenueMonthId) ON DELETE CASCADE,
+    CONSTRAINT UQ_RevenueMonthManualLine_Job UNIQUE (RevenueMonthId, JobNo)
+);
 GO
 
 /* ============================================================

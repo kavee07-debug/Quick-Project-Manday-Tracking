@@ -39,6 +39,7 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
     public DbSet<MeetingSetting> MeetingSettings => Set<MeetingSetting>();
     public DbSet<RevenueMonth> RevenueMonths => Set<RevenueMonth>();
     public DbSet<RevenueMonthSnapshot> RevenueMonthSnapshots => Set<RevenueMonthSnapshot>();
+    public DbSet<RevenueMonthManualLine> RevenueMonthManualLines => Set<RevenueMonthManualLine>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -276,7 +277,27 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.Property(x => x.PrevReportInfo).HasMaxLength(500);
             e.Property(x => x.CurrReportInfo).HasMaxLength(500);
             e.Property(x => x.ConfirmedBy).HasMaxLength(200);
+            e.Property(x => x.TargetAmount).HasColumnType("decimal(18,2)");
             e.HasIndex(x => new { x.PeriodYear, x.PeriodMonth }).IsUnique();
+        });
+
+        b.Entity<RevenueMonthManualLine>(e =>
+        {
+            e.ToTable("RevenueMonthManualLine");
+            e.HasKey(x => x.RevenueMonthManualLineId);
+            e.Property(x => x.JobNo).HasMaxLength(50);
+            e.Property(x => x.JobName).HasMaxLength(300);
+            e.Property(x => x.Customer).HasMaxLength(300);
+            e.Property(x => x.Note).HasMaxLength(300);
+            e.Property(x => x.CreatedBy).HasMaxLength(200);
+            e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.PrevProgress).HasColumnType("decimal(9,4)");
+            e.Property(x => x.CurrProgress).HasColumnType("decimal(9,4)");
+            e.HasIndex(x => new { x.RevenueMonthId, x.JobNo }).IsUnique();
+            e.HasOne(x => x.Month)
+                .WithMany(m => m.ManualLines)
+                .HasForeignKey(x => x.RevenueMonthId);
         });
 
         b.Entity<RevenueMonthSnapshot>(e =>

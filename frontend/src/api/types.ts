@@ -404,6 +404,7 @@ export interface RevenueMonth {
   isConfirmed: boolean;
   confirmedAt?: string | null;
   confirmedBy?: string | null;
+  targetAmount?: number | null;   // revenue the month is aiming at
   jobCount: number;
   totalAmountStd: number;
   totalAmountAct: number;
@@ -414,7 +415,7 @@ export interface RevenueMonthCreate {
   note?: string | null;
 }
 /** Status of a job across the two snapshots. */
-export type RevenueLineStatus = 'New' | 'Gone' | 'Normal';
+export type RevenueLineStatus = 'New' | 'Gone' | 'Normal' | 'Manual';
 export interface RevenueMonthLine {
   jobNo: string;
   jobName?: string | null;
@@ -436,6 +437,21 @@ export interface RevenueMonthLine {
   importedAct?: number | null;
   overrideAt?: string | null;
   overrideBy?: string | null;
+  // Typed in by hand rather than imported (status = 'Manual').
+  isManual: boolean;
+  manualLineId?: number | null;
+  note?: string | null;
+}
+/** Add/edit a hand-keyed job. `amount`, when given, wins over the figure derived from the two %. */
+export interface RevenueMonthManualUpsert {
+  jobNo: string;
+  jobName?: string | null;
+  customer?: string | null;
+  revenue?: number | null;
+  prevProgress?: number | null;
+  currProgress?: number | null;
+  amount?: number | null;
+  note?: string | null;
 }
 /** Sets (or with value = null clears) the manual override of this month's % for one job. */
 export interface RevenueMonthOverrideRequest {

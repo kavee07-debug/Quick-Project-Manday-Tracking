@@ -62,7 +62,7 @@ public record ResourceTimelineRow(int ResourceId, string Code, string Name, stri
 public record RevenueMonthDto(int RevenueMonthId, int PeriodYear, int PeriodMonth, string? Note,
     string? PrevFileName, string? PrevReportInfo, DateTime? PrevImportedAt, int PrevJobCount,
     string? CurrFileName, string? CurrReportInfo, DateTime? CurrImportedAt, int CurrJobCount,
-    bool IsConfirmed, DateTime? ConfirmedAt, string? ConfirmedBy,
+    bool IsConfirmed, DateTime? ConfirmedAt, string? ConfirmedBy, decimal? TargetAmount,
     int JobCount, decimal TotalAmountStd, decimal TotalAmountAct);
 public record RevenueMonthCreate(int PeriodYear, int PeriodMonth, string? Note);
 public record RevenueMonthLineDto(string JobNo, string? JobName, string? Customer, string? Pm,
@@ -72,7 +72,14 @@ public record RevenueMonthLineDto(string JobNo, string? JobName, string? Custome
     string Status, int MergedRowCount,
     // Manual correction of this month's %: flags plus the imported value it replaced.
     bool EditedStd, bool EditedAct, decimal? ImportedStd, decimal? ImportedAct,
-    DateTime? OverrideAt, string? OverrideBy);
+    DateTime? OverrideAt, string? OverrideBy,
+    // Typed in by hand rather than imported (Status = "Manual").
+    bool IsManual, int? ManualLineId, string? Note);
+// Add/edit a hand-keyed job. Amount, when given, wins over the figure derived from the two %.
+public record RevenueMonthManualUpsert(string JobNo, string? JobName, string? Customer,
+    decimal? Revenue, decimal? PrevProgress, decimal? CurrProgress, decimal? Amount, string? Note);
+// Revenue the month is aiming at; null clears it.
+public record RevenueMonthTargetRequest(decimal? Amount);
 // Sets (or with a null Value clears) the manual override of this month's % for one job.
 public record RevenueMonthOverrideRequest(string JobNo, string Basis, decimal? Value);
 public record RevenueMonthDetailDto(RevenueMonthDto Month, RevenueMonthLineDto[] Lines);

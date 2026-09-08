@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
-import type { ImportResult, RevenueMonthDetail, RevenueMonthEstimate, RevenueMonthLine } from '../api/types';
+import type {
+  ImportResult, RevenueMonthDetail, RevenueMonthEstimate, RevenueMonthLine, RevenueMonthManualUpsert,
+} from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { money, periodLabel, RevenueStatusBadge } from './RevenueMonthlyListPage';
+import { Modal } from '../components/Modal';
 import { RefreshButton } from '../components/RefreshButton';
 import './RevenueMonthlyPage.scss';
 
@@ -84,6 +87,12 @@ export default function RevenueMonthlyDetailPage() {
   const [editingJob, setEditingJob] = useState<string | null>(null);   // job whose % is being typed
   const [editValue, setEditValue] = useState('');
   const [savingJob, setSavingJob] = useState<string | null>(null);
+  // "+ เพิ่มบรรทัด": null = closed, 0 = adding, >0 = editing that manual line
+  const [manualForm, setManualForm] = useState<RevenueMonthManualUpsert | null>(null);
+  const [manualId, setManualId] = useState<number | null>(null);
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [editingTarget, setEditingTarget] = useState(false);
+  const [targetValue, setTargetValue] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -198,6 +207,72 @@ export default function RevenueMonthlyDetailPage() {
     saveOverride(jobNo, num);
   }
 
+  const emptyManual = (): RevenueMonthManualUpsert => ({
+    jobNo: '', jobName: null, customer: null,
+    revenue: null, prevProgress: null, currProgress: null, amount: null, note: null,
+  });
+
+  function openManualAdd() {
+    setManualId(null);
+    setManualForm(emptyManual());
+    setManualError(null);
+  }
+
+  function openManualEdit(l: RevenueMonthLine) {
+    setManualId(l.manualLineId ?? null);
+    setManualForm({
+      jobNo: l.jobNo, jobName: l.jobName ?? null, customer: l.customer ?? null,
+      revenue: l.revenue ?? null, prevProgress: l.prevAct, currProgress: l.currAct,
+      // Only a line whose amount was typed in has no project value to derive it from.
+      amount: l.revenue == null ? l.amountAct : null,
+      note: l.note ?? null,
+    });
+    setManualError(null);
+  }
+
+  async function submitManual(e: FormEvent) {
+    e.preventDefault();
+    if (!manualForm) return;
+    setManualError(null);
+    try {
+      const path = manualId
+        ? `/revenue-monthly/${id}/manual-lines/${manualId}`
+        : `/revenue-monthly/${id}/manual-lines`;
+      const saved = manualId
+        ? await api.put<RevenueMonthDetail>(path, manualForm)
+        : await api.post<RevenueMonthDetail>(path, manualForm);
+      setData(saved);
+      setManualForm(null);
+    } catch (err) {
+      setManualError(err instanceof ApiError ? err.message : 'บันทึกไม่สำเร็จ');
+    }
+  }
+
+  async function removeManual(l: RevenueMonthLine) {
+    if (!l.manualLineId) return;
+    if (!confirm(`ลบบรรทัดที่เพิ่มเอง "${l.jobNo}" ?`)) return;
+    setError(null);
+    try {
+      await api.del(`/revenue-monthly/${id}/manual-lines/${l.manualLineId}`);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'ลบไม่สำเร็จ');
+    }
+  }
+
+  async function saveTarget() {
+    const raw = targetValue.trim();
+    const amount = raw === '' ? null : Number(raw);
+    if (amount !== null && (Number.isNaN(amount) || amount < 0)) { setEditingTarget(false); return; }
+    setError(null);
+    try {
+      setData(await api.put<RevenueMonthDetail>(`/revenue-monthly/${id}/target`, { amount }));
+      setEditingTarget(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'บันทึก Target ไม่สำเร็จ');
+    }
+  }
+
   async function loadEstimate() {
     setEstimating(true);
     setError(null);
@@ -240,6 +315,12 @@ export default function RevenueMonthlyDetailPage() {
         <div className="head-actions">
           <RefreshButton onRefresh={load} />
           <button className="btn btn--sm" onClick={doExport}>⬇ Export .xlsx</button>
+          {isManager && !m.isConfirmed && (
+            <button className="btn btn--sm" onClick={openManualAdd}
+              title="เพิ่มบรรทัดเอง — ไว้คีย์ Est. รายได้ที่ยังไม่มีในรายงาน">
+              ＋ เพิ่มบรรทัด
+            </button>
+          )}
           {isManager && (m.isConfirmed
             ? <button className="btn btn--sm btn--navy" onClick={() => setConfirmed(false)}>Reopen</button>
             : <button className="btn btn--sm btn--primary" onClick={() => setConfirmed(true)}>✓ Confirm Revenue</button>)}
@@ -376,6 +457,34 @@ export default function RevenueMonthlyDetailPage() {
           <div className="statcard__label">รายได้เดือนนี้ ({basis === 'act' ? 'Act.' : 'Std.'})</div>
           <div className="statcard__value">{money(kpi.total)}</div>
         </div>
+        <div className="statcard statcard--navy">
+          <div className="statcard__label">
+            Target เดือนนี้
+            {isManager && !m.isConfirmed && (
+              <button type="button" className="rmon__iconbtn" title="ตั้ง Target ของงวดนี้"
+                onClick={() => { setEditingTarget(true); setTargetValue(m.targetAmount == null ? '' : String(m.targetAmount)); }}>✏</button>
+            )}
+          </div>
+          <div className="statcard__value">
+            {editingTarget ? (
+              <input className="input rmon__targetinput" type="number" step="0.01" min="0" autoFocus
+                value={targetValue}
+                onChange={(e) => setTargetValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); saveTarget(); }
+                  if (e.key === 'Escape') setEditingTarget(false);
+                }}
+                onBlur={saveTarget} placeholder="เว้นว่าง = ไม่ตั้ง" />
+            ) : m.targetAmount == null ? <span className="muted">ยังไม่ตั้ง</span> : money(m.targetAmount)}
+          </div>
+        </div>
+        <div className={`statcard ${m.targetAmount == null ? 'statcard--navy' : kpi.total - m.targetAmount >= 0 ? 'statcard--green' : 'statcard--red'}`}>
+          <div className="statcard__label" title="รายได้เดือนนี้ − Target">Diff vs Target</div>
+          <div className="statcard__value">
+            {m.targetAmount == null ? <span className="muted">—</span>
+              : `${kpi.total - m.targetAmount > 0 ? '+' : ''}${money(kpi.total - m.targetAmount)}`}
+          </div>
+        </div>
         <div className="statcard statcard--green">
           <div className="statcard__label">Job ที่มีรายได้</div>
           <div className="statcard__value">{kpi.earning}</div>
@@ -422,8 +531,12 @@ export default function RevenueMonthlyDetailPage() {
                 const edited = basis === 'act' ? l.editedAct : l.editedStd;
                 const imported = basis === 'act' ? l.importedAct : l.importedStd;
                 return (
-                  <tr key={l.jobNo} className={edited ? 'rmon__row--edited' : ''}>
-                    <td className="nowrap">{l.jobNo}</td>
+                  <tr key={l.isManual ? `m${l.manualLineId}` : l.jobNo}
+                    className={l.isManual ? 'rmon__row--manual' : edited ? 'rmon__row--edited' : ''}>
+                    <td className="nowrap">
+                      {l.isManual && <span className="rmon__manualicon" title="บรรทัดที่เพิ่มเอง">✚</span>}
+                      {l.jobNo}
+                    </td>
                     <td>{l.jobName}</td>
                     <td>{l.customer}</td>
                     <td className="num">
@@ -449,7 +562,7 @@ export default function RevenueMonthlyDetailPage() {
                       ) : (
                         <>
                           {pct(v.curr)}
-                          {isManager && !m.isConfirmed && (
+                          {isManager && !m.isConfirmed && !l.isManual && (
                             <button type="button" className="rmon__iconbtn" title="แก้ไข % เดือนนี้"
                               onClick={() => { setEditingJob(l.jobNo); setEditValue(String(v.curr)); }}>✏</button>
                           )}
@@ -467,6 +580,16 @@ export default function RevenueMonthlyDetailPage() {
                     </td>
                     <td className={`num rmon__amount ${v.amount < 0 ? 'over-budget' : ''}`}>{money(v.amount)}</td>
                     <td className="nowrap">
+                      {l.isManual && <span className="badge badge--purple">เพิ่มเอง</span>}
+                      {l.isManual && isManager && !m.isConfirmed && (
+                        <>
+                          <button type="button" className="rmon__iconbtn" title="แก้ไขบรรทัดนี้"
+                            onClick={() => openManualEdit(l)}>✏</button>
+                          <button type="button" className="rmon__iconbtn" title="ลบบรรทัดนี้"
+                            onClick={() => removeManual(l)}>🗑</button>
+                        </>
+                      )}
+                      {l.note && <span className="muted rmon__tag" title={l.note}>{l.note}</span>}
                       {l.status === 'New' && <span className="badge badge--blue">ใหม่</span>}
                       {l.status === 'Gone' && <span className="badge badge--red">ไม่มีเดือนนี้</span>}
                       {l.mergedRowCount > 1 && (
@@ -492,6 +615,60 @@ export default function RevenueMonthlyDetailPage() {
         </table>
       </div>
       </>
+      )}
+
+      {manualForm && (
+        <Modal title={manualId ? 'แก้ไขบรรทัดที่เพิ่มเอง' : 'เพิ่มบรรทัด (คีย์เอง)'} onClose={() => setManualForm(null)}>
+          <form onSubmit={submitManual}>
+            <p className="muted" style={{ marginTop: 0 }}>
+              ใช้คีย์งานที่ยังไม่มีในรายงาน QERP · บรรทัดที่เพิ่มเอง <b>จะไม่หายเมื่อ import Excel ใหม่</b>
+            </p>
+
+            <label className="field-label">Job No *</label>
+            <input className="input" required value={manualForm.jobNo}
+              onChange={(e) => setManualForm({ ...manualForm, jobNo: e.target.value })} />
+
+            <label className="field-label">ชื่องาน</label>
+            <input className="input" value={manualForm.jobName ?? ''}
+              onChange={(e) => setManualForm({ ...manualForm, jobName: e.target.value || null })} />
+
+            <label className="field-label">Customer</label>
+            <input className="input" value={manualForm.customer ?? ''}
+              onChange={(e) => setManualForm({ ...manualForm, customer: e.target.value || null })} />
+
+            <label className="field-label">มูลค่าโครงการ</label>
+            <input className="input" type="number" step="0.01" min="0" value={manualForm.revenue ?? ''}
+              onChange={(e) => setManualForm({ ...manualForm, revenue: e.target.value === '' ? null : Number(e.target.value) })} />
+
+            <div className="rmon__formrow">
+              <div>
+                <label className="field-label">% เดือนก่อน</label>
+                <input className="input" type="number" step="0.01" min="0" max="100" value={manualForm.prevProgress ?? ''}
+                  onChange={(e) => setManualForm({ ...manualForm, prevProgress: e.target.value === '' ? null : Number(e.target.value) })} />
+              </div>
+              <div>
+                <label className="field-label">% เดือนนี้</label>
+                <input className="input" type="number" step="0.01" min="0" max="100" value={manualForm.currProgress ?? ''}
+                  onChange={(e) => setManualForm({ ...manualForm, currProgress: e.target.value === '' ? null : Number(e.target.value) })} />
+              </div>
+            </div>
+
+            <label className="field-label">รายได้เดือนนี้ (ถ้ากรอก จะใช้ค่านี้แทนการคิดจาก %)</label>
+            <input className="input" type="number" step="0.01" value={manualForm.amount ?? ''}
+              placeholder="เว้นว่าง = คิดจาก (% เดือนนี้ − % เดือนก่อน) × มูลค่าโครงการ"
+              onChange={(e) => setManualForm({ ...manualForm, amount: e.target.value === '' ? null : Number(e.target.value) })} />
+
+            <label className="field-label">หมายเหตุ</label>
+            <input className="input" value={manualForm.note ?? ''}
+              onChange={(e) => setManualForm({ ...manualForm, note: e.target.value || null })} />
+
+            {manualError && <p className="error-text">{manualError}</p>}
+            <div className="form-actions">
+              <button type="button" className="btn" onClick={() => setManualForm(null)}>ยกเลิก</button>
+              <button type="submit" className="btn btn--primary">บันทึก</button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

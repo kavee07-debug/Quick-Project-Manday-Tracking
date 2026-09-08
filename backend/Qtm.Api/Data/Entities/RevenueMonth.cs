@@ -22,6 +22,9 @@ public class RevenueMonth
     public DateTime? CurrImportedAt { get; set; }
     public int CurrJobCount { get; set; }
 
+    // Revenue the month is aiming at; the screen shows how far off the actual figure is.
+    public decimal? TargetAmount { get; set; }
+
     // Confirm = the month is closed: the figures are final and the period is read-only until reopened.
     // Until then the revenue on screen is an estimate ("Est Revenue").
     public bool IsConfirmed { get; set; }
@@ -32,4 +35,5 @@ public class RevenueMonth
     public DateTime? UpdatedAt { get; set; }
 
     public ICollection<RevenueMonthSnapshot> Snapshots { get; set; } = new List<RevenueMonthSnapshot>();
+    public ICollection<RevenueMonthManualLine> ManualLines { get; set; } = new List<RevenueMonthManualLine>();
 }

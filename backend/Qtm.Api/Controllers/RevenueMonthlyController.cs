@@ -36,11 +36,16 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
         if (months.Count == 0) return Ok(Array.Empty<RevenueMonthDto>());
 
         var ids = months.Select(m => m.RevenueMonthId).ToList();
-        var byMonth = (await db.RevenueMonthSnapshots.Where(s => ids.Contains(s.RevenueMonthId)).ToListAsync())
+        var snapsByMonth = (await db.RevenueMonthSnapshots.Where(s => ids.Contains(s.RevenueMonthId)).ToListAsync())
             .GroupBy(s => s.RevenueMonthId)
-            .ToDictionary(g => g.Key, g => Compute(g));
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var manualByMonth = (await db.RevenueMonthManualLines.Where(x => ids.Contains(x.RevenueMonthId)).ToListAsync())
+            .GroupBy(x => x.RevenueMonthId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
-        return Ok(months.Select(m => ToDto(m, byMonth.GetValueOrDefault(m.RevenueMonthId) ?? [])));
+        return Ok(months.Select(m => ToDto(m, Compute(
+            snapsByMonth.GetValueOrDefault(m.RevenueMonthId) ?? [],
+            manualByMonth.GetValueOrDefault(m.RevenueMonthId) ?? []))));
     }
 
     [HttpGet("{id:int}")]
@@ -54,8 +59,9 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
 
     private async Task<ActionResult<RevenueMonthDetailDto>> BuildDetail(RevenueMonth month)
     {
-        var lines = Compute(await db.RevenueMonthSnapshots
-            .Where(s => s.RevenueMonthId == month.RevenueMonthId).ToListAsync());
+        var lines = Compute(
+            await db.RevenueMonthSnapshots.Where(s => s.RevenueMonthId == month.RevenueMonthId).ToListAsync(),
+            await db.RevenueMonthManualLines.Where(x => x.RevenueMonthId == month.RevenueMonthId).ToListAsync());
         return Ok(new RevenueMonthDetailDto(ToDto(month, lines), [.. lines]));
     }
 
@@ -222,6 +228,118 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
         return Ok(new ImportResult(snapshots.Count, 0, report.Rows.Count - snapshots.Count, errors));
     }
 
+    /// <summary>Sets (or with a null Amount clears) the revenue this month is aiming at.</summary>
+    [HttpPut("{id:int}/target")]
+    [Authorize(Roles = Roles.Managers)]
+    public async Task<ActionResult<RevenueMonthDetailDto>> SetTarget(int id, RevenueMonthTargetRequest req)
+    {
+        var month = await db.RevenueMonths.FirstOrDefaultAsync(m => m.RevenueMonthId == id);
+        if (month is null) return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
+        if (month.IsConfirmed) return BadRequest(new { message = ConfirmedLockMessage });
+        if (req.Amount is decimal a && a < 0) return BadRequest(new { message = "Target ต้องไม่ติดลบ" });
+
+        month.TargetAmount = req.Amount;
+        month.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return await BuildDetail(month);
+    }
+
+    /// <summary>Adds a job typed in by hand — these survive a re-import of either snapshot.</summary>
+    [HttpPost("{id:int}/manual-lines")]
+    [Authorize(Roles = Roles.Managers)]
+    public async Task<ActionResult<RevenueMonthDetailDto>> AddManualLine(int id, RevenueMonthManualUpsert req)
+    {
+        var month = await db.RevenueMonths.FirstOrDefaultAsync(m => m.RevenueMonthId == id);
+        if (month is null) return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
+        if (month.IsConfirmed) return BadRequest(new { message = ConfirmedLockMessage });
+
+        var error = ValidateManual(req);
+        if (error is not null) return BadRequest(new { message = error });
+
+        var jobNo = req.JobNo.Trim();
+        if (await db.RevenueMonthManualLines.AnyAsync(x => x.RevenueMonthId == id && x.JobNo == jobNo))
+            return BadRequest(new { message = $"มีบรรทัดที่เพิ่มเองของ Job '{jobNo}' อยู่แล้วในงวดนี้" });
+
+        db.RevenueMonthManualLines.Add(new RevenueMonthManualLine
+        {
+            RevenueMonthId = id,
+            JobNo = jobNo,
+            JobName = Trim(req.JobName),
+            Customer = Trim(req.Customer),
+            Revenue = req.Revenue,
+            PrevProgress = req.PrevProgress,
+            CurrProgress = req.CurrProgress,
+            Amount = req.Amount,
+            Note = Trim(req.Note),
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = CurrentUser(),
+        });
+        await db.SaveChangesAsync();
+        return await BuildDetail(month);
+    }
+
+    [HttpPut("{id:int}/manual-lines/{lineId:int}")]
+    [Authorize(Roles = Roles.Managers)]
+    public async Task<ActionResult<RevenueMonthDetailDto>> UpdateManualLine(int id, int lineId, RevenueMonthManualUpsert req)
+    {
+        var month = await db.RevenueMonths.FirstOrDefaultAsync(m => m.RevenueMonthId == id);
+        if (month is null) return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
+        if (month.IsConfirmed) return BadRequest(new { message = ConfirmedLockMessage });
+
+        var row = await db.RevenueMonthManualLines
+            .FirstOrDefaultAsync(x => x.RevenueMonthId == id && x.RevenueMonthManualLineId == lineId);
+        if (row is null) return NotFound(new { message = "ไม่พบบรรทัดที่ระบุ" });
+
+        var error = ValidateManual(req);
+        if (error is not null) return BadRequest(new { message = error });
+
+        var jobNo = req.JobNo.Trim();
+        if (await db.RevenueMonthManualLines
+                .AnyAsync(x => x.RevenueMonthId == id && x.JobNo == jobNo && x.RevenueMonthManualLineId != lineId))
+            return BadRequest(new { message = $"มีบรรทัดที่เพิ่มเองของ Job '{jobNo}' อยู่แล้วในงวดนี้" });
+
+        row.JobNo = jobNo;
+        row.JobName = Trim(req.JobName);
+        row.Customer = Trim(req.Customer);
+        row.Revenue = req.Revenue;
+        row.PrevProgress = req.PrevProgress;
+        row.CurrProgress = req.CurrProgress;
+        row.Amount = req.Amount;
+        row.Note = Trim(req.Note);
+        row.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return await BuildDetail(month);
+    }
+
+    [HttpDelete("{id:int}/manual-lines/{lineId:int}")]
+    [Authorize(Roles = Roles.Managers)]
+    public async Task<ActionResult<RevenueMonthDetailDto>> DeleteManualLine(int id, int lineId)
+    {
+        var month = await db.RevenueMonths.FirstOrDefaultAsync(m => m.RevenueMonthId == id);
+        if (month is null) return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
+        if (month.IsConfirmed) return BadRequest(new { message = ConfirmedLockMessage });
+
+        var row = await db.RevenueMonthManualLines
+            .FirstOrDefaultAsync(x => x.RevenueMonthId == id && x.RevenueMonthManualLineId == lineId);
+        if (row is null) return NotFound(new { message = "ไม่พบบรรทัดที่ระบุ" });
+
+        db.RevenueMonthManualLines.Remove(row);
+        await db.SaveChangesAsync();
+        return await BuildDetail(month);
+    }
+
+    private static string? Trim(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    private static string? ValidateManual(RevenueMonthManualUpsert req)
+    {
+        if (string.IsNullOrWhiteSpace(req.JobNo)) return "ต้องระบุ Job No";
+        if (req.JobNo.Trim().Length > 50) return "Job No ยาวเกิน 50 ตัวอักษร";
+        foreach (var pct in new[] { req.PrevProgress, req.CurrProgress })
+            if (pct is decimal p && (p < 0m || p > 100m)) return "% ต้องอยู่ระหว่าง 0 ถึง 100";
+        if (req.Revenue is decimal rev && rev < 0m) return "มูลค่าโครงการต้องไม่ติดลบ";
+        return null;
+    }
+
     /// <summary>
     /// Sets (or with a null Value clears) the hand-corrected % for one job in this month. The
     /// imported figure is left alone, so the screen can still show what the file said.
@@ -375,11 +493,12 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
         new(m.RevenueMonthId, m.PeriodYear, m.PeriodMonth, m.Note,
             m.PrevFileName, m.PrevReportInfo, m.PrevImportedAt, m.PrevJobCount,
             m.CurrFileName, m.CurrReportInfo, m.CurrImportedAt, m.CurrJobCount,
-            m.IsConfirmed, m.ConfirmedAt, m.ConfirmedBy,
+            m.IsConfirmed, m.ConfirmedAt, m.ConfirmedBy, m.TargetAmount,
             lines.Count, lines.Sum(l => l.AmountStd), lines.Sum(l => l.AmountAct));
 
     /// <summary>Full-outer-joins the two snapshot sides by Job No. and derives the month's revenue per job.</summary>
-    private static List<RevenueMonthLineDto> Compute(IEnumerable<RevenueMonthSnapshot> snapshots)
+    private static List<RevenueMonthLineDto> Compute(
+        IEnumerable<RevenueMonthSnapshot> snapshots, IEnumerable<RevenueMonthManualLine>? manual = null)
     {
         var all = snapshots as IList<RevenueMonthSnapshot> ?? [.. snapshots];
         var prev = all.Where(s => s.Side == SidePrev).ToDictionary(s => s.JobNo, StringComparer.OrdinalIgnoreCase);
@@ -426,7 +545,36 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
                 ImportedStd: c?.ProgressStd,
                 ImportedAct: c?.ProgressAct,
                 OverrideAt: c?.OverrideAt,
-                OverrideBy: c?.OverrideBy));
+                OverrideBy: c?.OverrideBy,
+                IsManual: false, ManualLineId: null, Note: null));
+        }
+
+        // Hand-keyed jobs sit alongside the imported ones. They carry a single set of figures that
+        // counts the same on either basis — someone estimating revenue is not distinguishing
+        // Std from Act — and an explicit Amount wins over the % calculation.
+        foreach (var m in (manual ?? []).OrderBy(x => x.JobNo, StringComparer.OrdinalIgnoreCase))
+        {
+            var mPrev = m.PrevProgress ?? 0m;
+            var mCurr = m.CurrProgress ?? 0m;
+            var mDelta = mCurr - mPrev;
+            var mAmount = m.Amount
+                ?? (m.Revenue is decimal mv ? Math.Round(mDelta / 100m * mv, 2, MidpointRounding.AwayFromZero) : 0m);
+
+            lines.Add(new RevenueMonthLineDto(
+                JobNo: m.JobNo,
+                JobName: m.JobName,
+                Customer: m.Customer,
+                Pm: null, StdGroup: null, Stage: null,
+                Revenue: m.Revenue,
+                PrevRevenue: null,
+                RevenueChanged: false,
+                PrevStd: mPrev, CurrStd: mCurr, DeltaStd: mDelta, AmountStd: mAmount,
+                PrevAct: mPrev, CurrAct: mCurr, DeltaAct: mDelta, AmountAct: mAmount,
+                Status: "Manual",
+                MergedRowCount: 1,
+                EditedStd: false, EditedAct: false, ImportedStd: null, ImportedAct: null,
+                OverrideAt: null, OverrideBy: null,
+                IsManual: true, ManualLineId: m.RevenueMonthManualLineId, Note: m.Note));
         }
         return lines;
     }

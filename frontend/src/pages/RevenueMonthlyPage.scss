@@ -138,6 +138,21 @@
 
   // A row whose "% เดือนนี้" was corrected by hand reads blue end to end.
   &__row--edited td { color: var(--color-primary); }
+  // A row typed in from scratch reads purple, and carries the ✚ marker.
+  &__row--manual td { color: var(--color-purple); }
+  &__manualicon { margin-right: var(--space-2); }
+
+  &__targetinput {
+    width: 100%;
+    max-width: 200px;
+    padding: 2px var(--space-2);
+    font-size: var(--font-size-lg);
+  }
+  &__formrow {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+  }
 
   &__statustag { margin-left: var(--space-3); vertical-align: middle; }
   &__currcell { white-space: nowrap; }
