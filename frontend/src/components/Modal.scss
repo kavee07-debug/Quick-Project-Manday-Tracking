@@ -12,6 +12,9 @@
 
   width: 100%;
   max-width: 460px;
+  // The backdrop is fixed, so anything taller than the viewport would be unreachable —
+  // cap the dialog and scroll its body instead (the head stays pinned).
+  max-height: 100%;
   display: flex;
   flex-direction: column;
 
@@ -19,6 +22,7 @@
   &--wide { max-width: 860px; }
 
   &__head {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -32,6 +36,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+    overflow-y: auto;
   }
 }
 
