@@ -130,6 +130,18 @@
 
   &__kpi { margin-bottom: var(--space-4); }
 
+  // A KPI card that doubles as a filter toggle — keep it looking like the other cards.
+  &__clickcard {
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    &:hover { border-color: var(--color-warning); }
+    &.is-active {
+      background: rgba(217, 139, 22, 0.12);
+      box-shadow: inset 0 0 0 1px var(--color-warning);
+    }
+  }
+
   // ----- table -----
   &__table {
     th { white-space: nowrap; }

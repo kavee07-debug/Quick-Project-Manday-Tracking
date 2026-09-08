@@ -13,7 +13,7 @@ import './RevenueMonthlyPage.scss';
 /** Which % column drives the revenue figure. */
 type Basis = 'act' | 'std';
 type Side = 'prev' | 'curr';
-type SortKey = 'jobNo' | 'customer' | 'revenue' | 'prev' | 'curr' | 'delta' | 'amount';
+type SortKey = 'jobNo' | 'customer' | 'revenue' | 'prev' | 'curr' | 'delta' | 'amount' | 'backlog';
 
 const pct = (n: number) => `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
 // Timestamps are stored UTC; read back from SQL they arrive without a designator, so add one
@@ -26,6 +26,11 @@ function view(l: RevenueMonthLine, basis: Basis) {
   return basis === 'act'
     ? { prev: l.prevAct, curr: l.currAct, delta: l.deltaAct, amount: l.amountAct }
     : { prev: l.prevStd, curr: l.currStd, delta: l.deltaStd, amount: l.amountStd };
+}
+
+/** What a job still has left to recognise at this month's %. */
+function backlogOf(l: RevenueMonthLine, basis: Basis) {
+  return Math.max(0, 100 - view(l, basis).curr) / 100 * (l.revenue ?? 0);
 }
 
 /** One upload slot for a snapshot side (previous / current month). */
@@ -92,6 +97,7 @@ export default function RevenueMonthlyDetailPage() {
   const [manualId, setManualId] = useState<number | null>(null);
   const [manualError, setManualError] = useState<string | null>(null);
   const [editingTarget, setEditingTarget] = useState(false);
+  const [onlyBacklog, setOnlyBacklog] = useState(false);   // Backlog card -> filter the table
   const [targetValue, setTargetValue] = useState('');
 
   const load = useCallback(async () => {
@@ -139,8 +145,9 @@ export default function RevenueMonthlyDetailPage() {
       (l.jobName ?? '').toLowerCase().includes(q) ||
       (l.customer ?? '').toLowerCase().includes(q));
     if (onlyWithRevenue) out = out.filter((l) => view(l, basis).amount !== 0);
+    if (onlyBacklog) out = out.filter((l) => backlogOf(l, basis) > 0);
     return out;
-  }, [lines, search, onlyWithRevenue, basis]);
+  }, [lines, search, onlyWithRevenue, onlyBacklog, basis]);
 
   const sorted = useMemo(() => {
     const dir = sort.dir === 'asc' ? 1 : -1;
@@ -153,6 +160,7 @@ export default function RevenueMonthlyDetailPage() {
         case 'prev': return (va.prev - vb.prev) * dir;
         case 'curr': return (va.curr - vb.curr) * dir;
         case 'delta': return (va.delta - vb.delta) * dir;
+        case 'backlog': return (backlogOf(a, basis) - backlogOf(b, basis)) * dir;
         default: return (va.amount - vb.amount) * dir;
       }
     });
@@ -167,7 +175,7 @@ export default function RevenueMonthlyDetailPage() {
       if (l.status === 'New') fresh++;
       if (v.delta < 0) backwards++;
       // Backlog = the part of each project's value not recognised yet at this month's %.
-      backlog += Math.max(0, 100 - v.curr) / 100 * (l.revenue ?? 0);
+      backlog += backlogOf(l, basis);
     }
     return { total, earning, fresh, backwards, backlog };
   }, [filtered, basis]);
@@ -447,6 +455,10 @@ export default function RevenueMonthlyDetailPage() {
           <input type="checkbox" checked={onlyWithRevenue} onChange={(e) => setOnlyWithRevenue(e.target.checked)} />
           เฉพาะที่มีรายได้
         </label>
+        <label className="rmon__check">
+          <input type="checkbox" checked={onlyBacklog} onChange={(e) => setOnlyBacklog(e.target.checked)} />
+          เฉพาะที่มี Backlog
+        </label>
       </div>
 
       {/* Imported rows are hidden until both sides are in (see the `lines` memo); say why, and keep
@@ -508,12 +520,16 @@ export default function RevenueMonthlyDetailPage() {
           <div className="statcard__label">Job ที่ % ถอยหลัง</div>
           <div className="statcard__value">{kpi.backwards}</div>
         </div>
-        <div className="statcard statcard--amber">
-          <div className="statcard__label" title="Σ (100% − % เดือนนี้) × มูลค่าโครงการ">
-            Backlog · รอรับรู้อีก
+        <button type="button"
+          className={`statcard statcard--amber rmon__clickcard${onlyBacklog ? ' is-active' : ''}`}
+          aria-pressed={onlyBacklog}
+          onClick={() => setOnlyBacklog((v) => !v)}
+          title="Σ (100% − % เดือนนี้) × มูลค่าโครงการ — คลิกเพื่อกรองตารางให้เหลือเฉพาะ Job ที่ยังมี Backlog">
+          <div className="statcard__label">
+            Backlog · รอรับรู้อีก {onlyBacklog ? '✓ กรองอยู่' : '🔍'}
           </div>
           <div className="statcard__value">{money(kpi.backlog)}</div>
-        </div>
+        </button>
       </div>
 
       <div className="card">
@@ -528,12 +544,14 @@ export default function RevenueMonthlyDetailPage() {
               <th className="num rmon__sortable" onClick={() => toggleSort('curr')}>% เดือนนี้{sortArrow('curr')}</th>
               <th className="num rmon__sortable" onClick={() => toggleSort('delta')}>Δ%{sortArrow('delta')}</th>
               <th className="num rmon__sortable" onClick={() => toggleSort('amount')}>รายได้เดือนนี้{sortArrow('amount')}</th>
+              <th className="num rmon__sortable" title="ส่วนที่ยังรับรู้ไม่ครบ = (100% − % เดือนนี้) × มูลค่าโครงการ"
+                onClick={() => toggleSort('backlog')}>Backlog{sortArrow('backlog')}</th>
               <th>สถานะ</th>
             </tr>
           </thead>
           <tbody>
             {sorted.length === 0 ? (
-              <tr><td colSpan={9} className="muted">
+              <tr><td colSpan={10} className="muted">
                 {lines.length === 0
                   ? (m.currImportedAt ? 'ยังไม่มีข้อมูล — import ไฟล์ทั้ง 2 ฝั่งก่อน'
                     : 'ยังไม่มีข้อมูล — import ไฟล์ หรือกด “＋ เพิ่มบรรทัด” เพื่อคีย์เอง')
@@ -593,6 +611,7 @@ export default function RevenueMonthlyDetailPage() {
                       {v.delta > 0 ? '+' : ''}{pct(v.delta)}
                     </td>
                     <td className={`num rmon__amount ${v.amount < 0 ? 'over-budget' : ''}`}>{money(v.amount)}</td>
+                    <td className="num">{money(backlogOf(l, basis))}</td>
                     <td className="nowrap">
                       {l.isManual && <span className="badge badge--purple">เพิ่มเอง</span>}
                       {l.isManual && isManager && !m.isConfirmed && (
@@ -622,6 +641,7 @@ export default function RevenueMonthlyDetailPage() {
               <tr>
                 <td colSpan={7} className="num rmon__totallabel">รวม {sorted.length} job</td>
                 <td className={`num rmon__amount ${kpi.total < 0 ? 'over-budget' : ''}`}>{money(kpi.total)}</td>
+                <td className="num rmon__amount">{money(kpi.backlog)}</td>
                 <td></td>
               </tr>
             </tfoot>
