@@ -35,6 +35,7 @@ export default function D365TimesheetPage() {
   const [query, setQuery] = useState('');
   const [resourceFilter, setResourceFilter] = useState('');   // '' = all; else a resourceNo
   const [statusFilter, setStatusFilter] = useState('');       // '' = all; else a timesheetStatus
+  const [dupOnly, setDupOnly] = useState(false);               // only rows whose SystemId is already an Actual
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const [editing, setEditing] = useState<D365TimesheetRow | null>(null);
@@ -95,13 +96,14 @@ export default function D365TimesheetPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
+      if (dupOnly && !r.alreadyInActual) return false;
       if (resourceFilter && r.resourceNo !== resourceFilter) return false;
       if (statusFilter && r.timesheetStatus !== statusFilter) return false;
       if (!q) return true;
       return [r.jobNo, r.jobDescription, r.jobTaskNo, r.resourceNo, r.resourceName, r.projectManager, r.newJobNo, r.newTaskNo, r.comment]
         .some((v) => (v ?? '').toLowerCase().includes(q));
     });
-  }, [rows, query, resourceFilter, statusFilter]);
+  }, [rows, query, resourceFilter, statusFilter, dupOnly]);
 
   // Projects filtered by the New Job combobox search (matches code or name); capped for perf.
   const jobMatches = useMemo(() => {
@@ -110,12 +112,19 @@ export default function D365TimesheetPage() {
     return list.slice(0, 50);
   }, [projects, jobQuery]);
 
+  // A Done task is finished work — don't offer it as a target for new actuals. The one already
+  // mapped on this row stays listed, so an existing mapping is never silently unpickable.
+  const selectableTasks = useMemo(
+    () => editTasks.filter((t) => t.status !== 'Done' || t.name.toLowerCase() === form.newTaskNo.toLowerCase()),
+    [editTasks, form.newTaskNo],
+  );
+
   // Tasks of the chosen project filtered by the New Task combobox search (name or description).
   const taskMatches = useMemo(() => {
     const q = taskQuery.trim().toLowerCase();
-    if (!q) return editTasks;
-    return editTasks.filter((t) => `${t.name} ${t.description ?? ''}`.toLowerCase().includes(q));
-  }, [editTasks, taskQuery]);
+    if (!q) return selectableTasks;
+    return selectableTasks.filter((t) => `${t.name} ${t.description ?? ''}`.toLowerCase().includes(q));
+  }, [selectableTasks, taskQuery]);
 
   const allVisibleSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
   const someVisibleSelected = filtered.some((r) => selected.has(r.id));
@@ -126,6 +135,16 @@ export default function D365TimesheetPage() {
     setSelected((prev) => {
       const next = new Set(prev);
       filtered.forEach((r) => { if (r.validateNewStatus === 'OK') next.add(r.id); });
+      return next;
+    });
+  }
+
+  // Rows re-fetched from the API whose SystemId is already an Actual — duplicates to clear out.
+  const dupCount = useMemo(() => rows.filter((r) => r.alreadyInActual).length, [rows]);
+  function selectDuplicates() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      filtered.forEach((r) => { if (r.alreadyInActual) next.add(r.id); });
       return next;
     });
   }
@@ -352,9 +371,18 @@ export default function D365TimesheetPage() {
             {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </label>
+        <label className="d365job__toggle" title="รายการที่ SystemId นี้ถูก Apply ลง Actual ไปแล้ว — ดึง API ซ้ำจึงติดมาอีก">
+          <input type="checkbox" checked={dupOnly} onChange={(e) => setDupOnly(e.target.checked)} />
+          เฉพาะรายการซ้ำ ({dupCount})
+        </label>
         <button className="btn btn--sm" onClick={selectValidNew} disabled={validNewCount === 0}
           title="เลือกทุกแถวที่ New Job / New Task ตรงกับระบบ (✅) — พร้อม Apply">
           ✅ เลือกที่ Vld. New ผ่าน ({validNewCount})
+        </button>
+        <button className="btn btn--sm" onClick={selectDuplicates}
+          disabled={filtered.every((r) => !r.alreadyInActual)}
+          title="เลือกทุกแถวที่ลง Actual ไปแล้ว (ตามตัวกรองปัจจุบัน) — แล้วกด “ลบที่เลือก”">
+          ⚠️ เลือกรายการซ้ำ ({filtered.filter((r) => r.alreadyInActual).length})
         </button>
         <span className="muted">
           แสดง {filtered.length} / {rows.length} รายการ{selected.size > 0 && ` · เลือก ${selected.size}`}
@@ -509,7 +537,7 @@ export default function D365TimesheetPage() {
             {(() => {
               const sel = editTasks.find((t) => t.name.toLowerCase() === form.newTaskNo.toLowerCase());
               const selLabel = !form.newTaskNo ? ''
-                : sel ? `${sel.name}${sel.description ? ` · ${sel.description}` : ''}`
+                : sel ? `${sel.name}${sel.description ? ` · ${sel.description}` : ''}${sel.status === 'Done' ? ' (Done)' : ''}`
                 : `${form.newTaskNo} (เดิม — ไม่พบในระบบ)`;
               return (
                 <div className="d365job__combo">
@@ -529,7 +557,11 @@ export default function D365TimesheetPage() {
                         </li>
                       ))}
                       {taskMatches.length === 0 && (
-                        <li className="muted">{editTasks.length === 0 ? 'Project นี้ยังไม่มี Task' : 'ไม่พบ Task ที่ค้นหา'}</li>
+                        <li className="muted">
+                          {editTasks.length === 0 ? 'Project นี้ยังไม่มี Task'
+                            : selectableTasks.length === 0 ? 'Task ของ Project นี้ปิด (Done) หมดแล้ว'
+                            : 'ไม่พบ Task ที่ค้นหา'}
+                        </li>
                       )}
                     </ul>
                   )}
