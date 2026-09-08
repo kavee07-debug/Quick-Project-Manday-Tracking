@@ -413,6 +413,11 @@ export interface RevenueMonthCreate {
   periodYear: number;
   periodMonth: number;
   note?: string | null;
+  targetAmount?: number | null;
+}
+/** Single-row defaults applied when creating a period. */
+export interface RevenueMonthSetting {
+  defaultTargetAmount?: number | null;
 }
 /** Status of a job across the two snapshots. */
 export type RevenueLineStatus = 'New' | 'Gone' | 'Normal' | 'Manual';

@@ -64,7 +64,9 @@ public record RevenueMonthDto(int RevenueMonthId, int PeriodYear, int PeriodMont
     string? CurrFileName, string? CurrReportInfo, DateTime? CurrImportedAt, int CurrJobCount,
     bool IsConfirmed, DateTime? ConfirmedAt, string? ConfirmedBy, decimal? TargetAmount,
     int JobCount, decimal TotalAmountStd, decimal TotalAmountAct);
-public record RevenueMonthCreate(int PeriodYear, int PeriodMonth, string? Note);
+public record RevenueMonthCreate(int PeriodYear, int PeriodMonth, string? Note, decimal? TargetAmount);
+// Single-row defaults applied when creating a period.
+public record RevenueMonthSettingDto(decimal? DefaultTargetAmount);
 public record RevenueMonthLineDto(string JobNo, string? JobName, string? Customer, string? Pm,
     string? StdGroup, string? Stage, decimal? Revenue, decimal? PrevRevenue, bool RevenueChanged,
     decimal PrevStd, decimal CurrStd, decimal DeltaStd, decimal AmountStd,

@@ -68,6 +68,33 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
     private string CurrentUser() =>
         User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "unknown";
 
+    /// <summary>Defaults seeded into a new period. Single row, created on first save.</summary>
+    [HttpGet("settings")]
+    public async Task<ActionResult<RevenueMonthSettingDto>> GetSettings()
+    {
+        var s = await db.RevenueMonthSettings.FirstOrDefaultAsync(x => x.Id == 1);
+        return Ok(new RevenueMonthSettingDto(s?.DefaultTargetAmount));
+    }
+
+    [HttpPut("settings")]
+    [Authorize(Roles = Roles.Managers)]
+    public async Task<ActionResult<RevenueMonthSettingDto>> SaveSettings(RevenueMonthSettingDto req)
+    {
+        if (req.DefaultTargetAmount is decimal a && a < 0)
+            return BadRequest(new { message = "Target เริ่มต้นต้องไม่ติดลบ" });
+
+        var s = await db.RevenueMonthSettings.FirstOrDefaultAsync(x => x.Id == 1);
+        if (s is null)
+        {
+            s = new RevenueMonthSetting { Id = 1 };
+            db.RevenueMonthSettings.Add(s);
+        }
+        s.DefaultTargetAmount = req.DefaultTargetAmount;
+        s.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return Ok(new RevenueMonthSettingDto(s.DefaultTargetAmount));
+    }
+
     [HttpPost]
     [Authorize(Roles = Roles.Managers)]
     public async Task<ActionResult<RevenueMonthDto>> Create(RevenueMonthCreate req)
@@ -78,12 +105,20 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
             return BadRequest(new { message = "เดือนต้องอยู่ระหว่าง 1 ถึง 12" });
         if (await db.RevenueMonths.AnyAsync(m => m.PeriodYear == req.PeriodYear && m.PeriodMonth == req.PeriodMonth))
             return BadRequest(new { message = $"มีงวด {req.PeriodYear}-{req.PeriodMonth:00} อยู่แล้ว" });
+        if (req.TargetAmount is decimal t && t < 0)
+            return BadRequest(new { message = "Target ต้องไม่ติดลบ" });
+
+        // The client prefills Target from the settings, but fall back to it here as well so a period
+        // created straight through the API still picks up the default.
+        var target = req.TargetAmount
+            ?? (await db.RevenueMonthSettings.FirstOrDefaultAsync(x => x.Id == 1))?.DefaultTargetAmount;
 
         var month = new RevenueMonth
         {
             PeriodYear = req.PeriodYear,
             PeriodMonth = req.PeriodMonth,
             Note = req.Note,
+            TargetAmount = target,
             CreatedAt = DateTime.UtcNow,
         };
         db.RevenueMonths.Add(month);

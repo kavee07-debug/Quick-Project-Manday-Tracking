@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
-import type { RevenueMonth, RevenueMonthCreate } from '../api/types';
+import type { RevenueMonth, RevenueMonthCreate, RevenueMonthSetting } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../components/Modal';
 import { RefreshButton } from '../components/RefreshButton';
@@ -22,12 +22,15 @@ export function RevenueStatusBadge({ confirmed }: { confirmed: boolean }) {
     : <span className="badge badge--orange">Est Revenue</span>;
 }
 
-function defaultForm(): RevenueMonthCreate {
+function defaultForm(defaultTarget?: number | null): RevenueMonthCreate {
   // Default to the month that just ended — that is the one being closed.
   const d = new Date();
   d.setDate(1);
   d.setMonth(d.getMonth() - 1);
-  return { periodYear: d.getFullYear(), periodMonth: d.getMonth() + 1, note: null };
+  return {
+    periodYear: d.getFullYear(), periodMonth: d.getMonth() + 1, note: null,
+    targetAmount: defaultTarget ?? null,
+  };
 }
 
 export default function RevenueMonthlyListPage() {
@@ -39,6 +42,12 @@ export default function RevenueMonthlyListPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<RevenueMonthCreate>(defaultForm());
   const [formError, setFormError] = useState<string | null>(null);
+
+  // "ตั้งค่า Default" — the Target seeded into every new period.
+  const [settings, setSettings] = useState<RevenueMonthSetting>({});
+  const [showSetup, setShowSetup] = useState(false);
+  const [setupTarget, setSetupTarget] = useState('');
+  const [setupError, setSetupError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,12 +61,39 @@ export default function RevenueMonthlyListPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    api.get<RevenueMonthSetting>('/revenue-monthly/settings').then(setSettings)
+      .catch(() => {/* the default Target is optional */});
+  }, [load]);
 
   function openCreate() {
-    setForm(defaultForm());
+    setForm(defaultForm(settings.defaultTargetAmount));
     setFormError(null);
     setShowForm(true);
+  }
+
+  function openSetup() {
+    setSetupTarget(settings.defaultTargetAmount == null ? '' : String(settings.defaultTargetAmount));
+    setSetupError(null);
+    setShowSetup(true);
+  }
+
+  async function submitSetup(e: FormEvent) {
+    e.preventDefault();
+    setSetupError(null);
+    const raw = setupTarget.trim();
+    const amount = raw === '' ? null : Number(raw);
+    if (amount !== null && (Number.isNaN(amount) || amount < 0)) {
+      setSetupError('Target เริ่มต้นต้องเป็นตัวเลขและไม่ติดลบ');
+      return;
+    }
+    try {
+      setSettings(await api.put<RevenueMonthSetting>('/revenue-monthly/settings', { defaultTargetAmount: amount }));
+      setShowSetup(false);
+    } catch (err) {
+      setSetupError(err instanceof ApiError ? err.message : 'บันทึกไม่สำเร็จ');
+    }
   }
 
   async function submit(e: FormEvent) {
@@ -91,6 +127,7 @@ export default function RevenueMonthlyListPage() {
         <h1 className="rmon__title">Revenue Monthly</h1>
         <div className="head-actions">
           <RefreshButton onRefresh={load} />
+          {isManager && <button className="btn btn--sm" onClick={openSetup}>⚙ ตั้งค่า Default</button>}
           {isManager && <button className="btn btn--primary" onClick={openCreate}>+ สร้างงวด</button>}
         </div>
       </div>
@@ -158,6 +195,27 @@ export default function RevenueMonthlyListPage() {
         </table>
       </div>
 
+      {showSetup && (
+        <Modal title="ตั้งค่า Default ของ Revenue Monthly" onClose={() => setShowSetup(false)}>
+          <form onSubmit={submitSetup}>
+            <p className="muted" style={{ marginTop: 0 }}>
+              ค่านี้จะถูกเติมให้อัตโนมัติเมื่อกด “สร้างงวด” — <b>แก้ที่แต่ละงวดได้ตามปกติ</b> และไม่กระทบงวดที่สร้างไปแล้ว
+            </p>
+
+            <label className="field-label">Target เริ่มต้นต่อเดือน</label>
+            <input className="input" type="number" step="0.01" min="0" autoFocus
+              value={setupTarget} placeholder="เว้นว่าง = ไม่ตั้งค่าเริ่มต้น"
+              onChange={(e) => setSetupTarget(e.target.value)} />
+
+            {setupError && <p className="error-text">{setupError}</p>}
+            <div className="form-actions">
+              <button type="button" className="btn" onClick={() => setShowSetup(false)}>ยกเลิก</button>
+              <button type="submit" className="btn btn--primary">บันทึก</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
       {showForm && (
         <Modal title="สร้างงวด Revenue Monthly" onClose={() => setShowForm(false)}>
           <form onSubmit={submit}>
@@ -172,6 +230,14 @@ export default function RevenueMonthlyListPage() {
               onChange={(e) => setForm({ ...form, periodMonth: Number(e.target.value) })}>
               {TH_MONTH.map((label, i) => <option key={label} value={i + 1}>{label} ({i + 1})</option>)}
             </select>
+
+            <label className="field-label">
+              Target ของงวดนี้
+              {settings.defaultTargetAmount != null && <span className="muted"> · ค่าเริ่มต้น {money(settings.defaultTargetAmount)}</span>}
+            </label>
+            <input className="input" type="number" step="0.01" min="0" value={form.targetAmount ?? ''}
+              placeholder="เว้นว่าง = ไม่ตั้ง Target"
+              onChange={(e) => setForm({ ...form, targetAmount: e.target.value === '' ? null : Number(e.target.value) })} />
 
             <label className="field-label">หมายเหตุ</label>
             <input className="input" value={form.note ?? ''} placeholder="ไม่บังคับ"

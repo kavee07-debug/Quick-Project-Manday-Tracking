@@ -12,6 +12,7 @@ USE QtmManday;
 GO
 
 /* ---------- Drop in dependency order (for re-runs) ---------- */
+IF OBJECT_ID(N'dbo.RevenueMonthSetting', N'U') IS NOT NULL DROP TABLE dbo.RevenueMonthSetting;
 IF OBJECT_ID(N'dbo.RevenueMonthManualLine', N'U') IS NOT NULL DROP TABLE dbo.RevenueMonthManualLine;  -- FK -> RevenueMonth
 IF OBJECT_ID(N'dbo.RevenueMonthSnapshot', N'U') IS NOT NULL DROP TABLE dbo.RevenueMonthSnapshot;  -- FK -> RevenueMonth
 IF OBJECT_ID(N'dbo.RevenueMonth', N'U')  IS NOT NULL DROP TABLE dbo.RevenueMonth;
@@ -423,6 +424,15 @@ GO
 /* Jobs typed in by hand on the screen (mainly to estimate revenue the report does not
    carry yet). Separate from the snapshots on purpose: re-importing either Excel file
    must leave these rows alone. Amount, when filled in, wins over the % calculation. */
+/* Single-row defaults applied when creating a new Revenue Monthly period. */
+CREATE TABLE dbo.RevenueMonthSetting (
+    Id                  INT NOT NULL CONSTRAINT PK_RevenueMonthSetting PRIMARY KEY,   -- fixed = 1
+    DefaultTargetAmount DECIMAL(18,2) NULL,
+    UpdatedAt           DATETIME2(0)  NULL,
+    CONSTRAINT CK_RevenueMonthSetting_Id CHECK (Id = 1)
+);
+GO
+
 CREATE TABLE dbo.RevenueMonthManualLine (
     RevenueMonthManualLineId INT IDENTITY(1,1) NOT NULL
         CONSTRAINT PK_RevenueMonthManualLine PRIMARY KEY,

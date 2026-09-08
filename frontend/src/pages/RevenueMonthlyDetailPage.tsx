@@ -123,7 +123,13 @@ export default function RevenueMonthlyDetailPage() {
     }
   }
 
-  const lines = useMemo(() => data?.lines ?? [], [data]);
+  // Until this month's snapshot is imported every imported row reads as 0% now, which would show a
+  // large negative "revenue". The hand-keyed lines are the only ones that mean anything yet, so show
+  // just those — adding a line before any import is a normal way to start a period.
+  const lines = useMemo(() => {
+    const all = data?.lines ?? [];
+    return data?.month.currImportedAt ? all : all.filter((l) => l.isManual);
+  }, [data]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -443,18 +449,21 @@ export default function RevenueMonthlyDetailPage() {
         </label>
       </div>
 
-      {/* Without this month's snapshot every job reads as 0% now, which would show a large negative
-          "revenue" — say so instead of publishing a number that means nothing. */}
-      {!m.currImportedAt ? (
+      {/* Imported rows are hidden until both sides are in (see the `lines` memo); say why, and keep
+          showing whatever was keyed in by hand. */}
+      {!m.currImportedAt && (
         <div className="card rmon__pending muted">
-          ยังไม่ได้ import ข้อมูล ณ สิ้นเดือนนี้ — ยอดรายได้จริงจะคำนวณได้เมื่อ import ครบทั้ง 2 ฝั่ง
+          ยังไม่ได้ import ข้อมูล ณ สิ้นเดือนนี้ — ตัวเลขด้านล่างนับเฉพาะ <b>บรรทัดที่เพิ่มเอง</b>
+          {' '}ส่วนยอดจากรายงานจะคำนวณได้เมื่อ import ครบทั้ง 2 ฝั่ง
           {m.prevImportedAt && <> ระหว่างนี้ดู <b>ยอดประมาณการ</b> ด้านบนแทนได้</>}
         </div>
-      ) : (
-      <>
+      )}
+
       <div className="kpi-grid rmon__kpi">
         <div className="statcard statcard--teal">
-          <div className="statcard__label">รายได้เดือนนี้ ({basis === 'act' ? 'Act.' : 'Std.'})</div>
+          <div className="statcard__label">
+            รายได้เดือนนี้ ({basis === 'act' ? 'Act.' : 'Std.'}){!m.currImportedAt && ' · เฉพาะที่คีย์เอง'}
+          </div>
           <div className="statcard__value">{money(kpi.total)}</div>
         </div>
         <div className="statcard statcard--navy">
@@ -525,7 +534,10 @@ export default function RevenueMonthlyDetailPage() {
           <tbody>
             {sorted.length === 0 ? (
               <tr><td colSpan={9} className="muted">
-                {lines.length === 0 ? 'ยังไม่มีข้อมูล — import ไฟล์ทั้ง 2 ฝั่งก่อน' : 'ไม่พบรายการที่ตรงกับตัวกรอง'}
+                {lines.length === 0
+                  ? (m.currImportedAt ? 'ยังไม่มีข้อมูล — import ไฟล์ทั้ง 2 ฝั่งก่อน'
+                    : 'ยังไม่มีข้อมูล — import ไฟล์ หรือกด “＋ เพิ่มบรรทัด” เพื่อคีย์เอง')
+                  : 'ไม่พบรายการที่ตรงกับตัวกรอง'}
               </td></tr>
             ) : (
               sorted.map((l) => {
@@ -616,8 +628,6 @@ export default function RevenueMonthlyDetailPage() {
           )}
         </table>
       </div>
-      </>
-      )}
 
       {manualForm && (
         <Modal title={manualId ? 'แก้ไขบรรทัดที่เพิ่มเอง' : 'เพิ่มบรรทัด (คีย์เอง)'} onClose={() => setManualForm(null)}>

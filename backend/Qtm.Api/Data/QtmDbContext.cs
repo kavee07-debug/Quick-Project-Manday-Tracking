@@ -40,6 +40,7 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
     public DbSet<RevenueMonth> RevenueMonths => Set<RevenueMonth>();
     public DbSet<RevenueMonthSnapshot> RevenueMonthSnapshots => Set<RevenueMonthSnapshot>();
     public DbSet<RevenueMonthManualLine> RevenueMonthManualLines => Set<RevenueMonthManualLine>();
+    public DbSet<RevenueMonthSetting> RevenueMonthSettings => Set<RevenueMonthSetting>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -279,6 +280,14 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.Property(x => x.ConfirmedBy).HasMaxLength(200);
             e.Property(x => x.TargetAmount).HasColumnType("decimal(18,2)");
             e.HasIndex(x => new { x.PeriodYear, x.PeriodMonth }).IsUnique();
+        });
+
+        b.Entity<RevenueMonthSetting>(e =>
+        {
+            e.ToTable("RevenueMonthSetting");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.DefaultTargetAmount).HasColumnType("decimal(18,2)");
         });
 
         b.Entity<RevenueMonthManualLine>(e =>
