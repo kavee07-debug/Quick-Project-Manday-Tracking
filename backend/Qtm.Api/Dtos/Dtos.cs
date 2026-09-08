@@ -70,6 +70,15 @@ public record RevenueMonthLineDto(string JobNo, string? JobName, string? Custome
     decimal PrevAct, decimal CurrAct, decimal DeltaAct, decimal AmountAct,
     string Status, int MergedRowCount);
 public record RevenueMonthDetailDto(RevenueMonthDto Month, RevenueMonthLineDto[] Lines);
+// One completed period feeding the estimate, with the weight it carried.
+public record RevenueMonthEstimateSource(int PeriodYear, int PeriodMonth, decimal AmountStd, decimal AmountAct, int Weight);
+// Forecast for a period whose current-month snapshot has not been imported yet.
+public record RevenueMonthEstimateDto(
+    decimal RawStd, decimal RawAct,                 // weighted average of the past months
+    decimal? RemainingStd, decimal? RemainingAct,   // ceiling: revenue still unrecognised at the start of the month
+    decimal EstimateStd, decimal EstimateAct,       // Raw, capped by the ceiling when one is known
+    bool CappedStd, bool CappedAct,
+    RevenueMonthEstimateSource[] Sources);
 
 // ---- User management (Admin) ----
 public record UserDto(int UserId, string Email, string DisplayName, bool IsActive, string[] Roles);

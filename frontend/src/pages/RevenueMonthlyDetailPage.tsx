@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
-import type { ImportResult, RevenueMonthDetail, RevenueMonthLine } from '../api/types';
+import type { ImportResult, RevenueMonthDetail, RevenueMonthEstimate, RevenueMonthLine } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { money, periodLabel } from './RevenueMonthlyListPage';
 import { RefreshButton } from '../components/RefreshButton';
@@ -79,6 +79,8 @@ export default function RevenueMonthlyDetailPage() {
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'amount', dir: 'desc' });
   const [busySide, setBusySide] = useState<Side | null>(null);
   const [result, setResult] = useState<{ side: Side; res: ImportResult } | null>(null);
+  const [estimate, setEstimate] = useState<RevenueMonthEstimate | null>(null);
+  const [estimating, setEstimating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -157,6 +159,18 @@ export default function RevenueMonthlyDetailPage() {
   }
   const sortArrow = (key: SortKey) => (sort.key === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '');
 
+  async function loadEstimate() {
+    setEstimating(true);
+    setError(null);
+    try {
+      setEstimate(await api.get<RevenueMonthEstimate>(`/revenue-monthly/${id}/estimate`));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'คำนวณยอดประมาณการไม่สำเร็จ');
+    } finally {
+      setEstimating(false);
+    }
+  }
+
   async function doExport() {
     if (!data) return;
     const { periodYear, periodMonth } = data.month;
@@ -221,6 +235,64 @@ export default function RevenueMonthlyDetailPage() {
         </div>
       )}
 
+      {/* Until this month's snapshot is in, the only thing we can offer is a forecast from the months already closed. */}
+      {!m.currImportedAt && (
+        <div className="rmon__forecast card">
+          <div className="rmon__forecast-head">
+            <span className="rmon__forecast-title">📈 ยอดประมาณการเดือนนี้</span>
+            <button className="btn btn--sm" onClick={loadEstimate} disabled={estimating}>
+              {estimating ? 'กำลังคำนวณ…' : estimate ? 'คำนวณใหม่' : 'ดูยอดประมาณการ'}
+            </button>
+          </div>
+          <p className="muted rmon__forecast-hint">
+            ยังไม่ได้ import ข้อมูล ณ สิ้นเดือนนี้ — กดเพื่อประมาณการจากงวดที่ปิดแล้วย้อนหลังไม่เกิน 12 เดือน
+            (เฉลี่ยถ่วงน้ำหนัก เดือนล่าสุดมีน้ำหนักมากที่สุด)
+          </p>
+
+          {estimate && (estimate.sources.length === 0 ? (
+            <p className="muted">
+              ยังไม่มีงวดก่อนหน้าที่ import ครบทั้ง 2 ฝั่ง — สร้างงวดของเดือนก่อนๆ แล้ว import ให้ครบก่อน
+              ระบบถึงจะประมาณการได้
+            </p>
+          ) : (() => {
+            const est = basis === 'act' ? estimate.estimateAct : estimate.estimateStd;
+            const raw = basis === 'act' ? estimate.rawAct : estimate.rawStd;
+            const capped = basis === 'act' ? estimate.cappedAct : estimate.cappedStd;
+            const remaining = basis === 'act' ? estimate.remainingAct : estimate.remainingStd;
+            return (
+              <>
+                <div className="rmon__forecast-value">
+                  {money(est)} <span className="muted">บาท ({basis === 'act' ? 'Act.' : 'Std.'})</span>
+                </div>
+                {capped && (
+                  <p className="muted">
+                    ค่าเฉลี่ยถ่วงน้ำหนักได้ {money(raw)} แต่ถูกจำกัดไว้ที่ {money(remaining)} —
+                    เท่ากับมูลค่าที่ยังรับรู้ไม่ครบของทุก Job ณ สิ้นเดือนก่อน
+                  </p>
+                )}
+                {!capped && remaining != null && (
+                  <p className="muted">มูลค่าที่ยังรับรู้ได้ทั้งหมด ณ สิ้นเดือนก่อน: {money(remaining)} บาท</p>
+                )}
+                <table className="table rmon__forecast-table">
+                  <thead>
+                    <tr><th>งวดที่ใช้คำนวณ</th><th className="num">รายได้จริง</th><th className="num">น้ำหนัก</th></tr>
+                  </thead>
+                  <tbody>
+                    {estimate.sources.map((s) => (
+                      <tr key={`${s.periodYear}-${s.periodMonth}`}>
+                        <td className="nowrap">{periodLabel(s.periodYear, s.periodMonth)}</td>
+                        <td className="num">{money(basis === 'act' ? s.amountAct : s.amountStd)}</td>
+                        <td className="num">×{s.weight}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            );
+          })())}
+        </div>
+      )}
+
       <div className="rmon__filterbar">
         <span className="rmon__filterbar-label">คิดรายได้จาก:</span>
         <button type="button" className={`status-chip badge--blue ${basis === 'act' ? 'is-active' : ''}`}
@@ -240,6 +312,15 @@ export default function RevenueMonthlyDetailPage() {
         </label>
       </div>
 
+      {/* Without this month's snapshot every job reads as 0% now, which would show a large negative
+          "revenue" — say so instead of publishing a number that means nothing. */}
+      {!m.currImportedAt ? (
+        <div className="card rmon__pending muted">
+          ยังไม่ได้ import ข้อมูล ณ สิ้นเดือนนี้ — ยอดรายได้จริงจะคำนวณได้เมื่อ import ครบทั้ง 2 ฝั่ง
+          {m.prevImportedAt && <> ระหว่างนี้ดู <b>ยอดประมาณการ</b> ด้านบนแทนได้</>}
+        </div>
+      ) : (
+      <>
       <div className="kpi-grid rmon__kpi">
         <div className="statcard statcard--teal">
           <div className="statcard__label">รายได้เดือนนี้ ({basis === 'act' ? 'Act.' : 'Std.'})</div>
@@ -327,6 +408,8 @@ export default function RevenueMonthlyDetailPage() {
           )}
         </table>
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -430,6 +430,23 @@ export interface RevenueMonthDetail {
   month: RevenueMonth;
   lines: RevenueMonthLine[];
 }
+/** One closed period feeding the estimate, with the weight it carried. */
+export interface RevenueMonthEstimateSource {
+  periodYear: number;
+  periodMonth: number;
+  amountStd: number;
+  amountAct: number;
+  weight: number;
+}
+/** Forecast for a period whose current-month snapshot has not been imported yet. */
+export interface RevenueMonthEstimate {
+  rawStd: number; rawAct: number;                       // weighted average of the past months
+  remainingStd?: number | null;                         // ceiling from the previous-month snapshot
+  remainingAct?: number | null;
+  estimateStd: number; estimateAct: number;             // raw, capped by the ceiling
+  cappedStd: boolean; cappedAct: boolean;
+  sources: RevenueMonthEstimateSource[];
+}
 
 export interface TaskSummary {
   taskId: number;

@@ -174,6 +174,72 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
         return Ok(new ImportResult(snapshots.Count, 0, report.Rows.Count - snapshots.Count, errors));
     }
 
+    /// <summary>
+    /// Forecast for a period whose current-month snapshot is not in yet. It is a weighted average of
+    /// the months already closed (both snapshots imported) within the previous 12 months — the most
+    /// recent month carries the most weight — capped by the revenue still left to recognise according
+    /// to this period's previous-month snapshot.
+    /// </summary>
+    [HttpGet("{id:int}/estimate")]
+    public async Task<ActionResult<RevenueMonthEstimateDto>> Estimate(int id)
+    {
+        var month = await db.RevenueMonths.FirstOrDefaultAsync(m => m.RevenueMonthId == id);
+        if (month is null) return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
+
+        static int MonthIndex(int year, int month) => year * 12 + month;
+        var target = MonthIndex(month.PeriodYear, month.PeriodMonth);
+
+        // Closed periods only — a half-imported month would drag the average down with a partial figure.
+        var closed = await db.RevenueMonths
+            .Where(m => m.RevenueMonthId != id && m.PrevImportedAt != null && m.CurrImportedAt != null)
+            .ToListAsync();
+        var prior = closed
+            .Where(m =>
+            {
+                var i = MonthIndex(m.PeriodYear, m.PeriodMonth);
+                return i < target && target - i <= 12;
+            })
+            .OrderBy(m => m.PeriodYear).ThenBy(m => m.PeriodMonth)
+            .ToList();
+
+        var sources = new List<RevenueMonthEstimateSource>();
+        if (prior.Count > 0)
+        {
+            var priorIds = prior.Select(m => m.RevenueMonthId).ToList();
+            var byMonth = (await db.RevenueMonthSnapshots.Where(s => priorIds.Contains(s.RevenueMonthId)).ToListAsync())
+                .GroupBy(s => s.RevenueMonthId)
+                .ToDictionary(g => g.Key, g => Compute(g));
+
+            // Weights 1..n from oldest to newest, so the latest month counts n times the oldest one.
+            for (var i = 0; i < prior.Count; i++)
+            {
+                var lines = byMonth.GetValueOrDefault(prior[i].RevenueMonthId) ?? [];
+                sources.Add(new RevenueMonthEstimateSource(
+                    prior[i].PeriodYear, prior[i].PeriodMonth,
+                    lines.Sum(l => l.AmountStd), lines.Sum(l => l.AmountAct), i + 1));
+            }
+        }
+
+        var totalWeight = sources.Sum(s => s.Weight);
+        var rawStd = totalWeight == 0 ? 0m : Math.Round(sources.Sum(s => s.AmountStd * s.Weight) / totalWeight, 2, MidpointRounding.AwayFromZero);
+        var rawAct = totalWeight == 0 ? 0m : Math.Round(sources.Sum(s => s.AmountAct * s.Weight) / totalWeight, 2, MidpointRounding.AwayFromZero);
+
+        // Ceiling: what is still unrecognised across the jobs as of the previous month's snapshot.
+        var prevSide = await db.RevenueMonthSnapshots.Where(s => s.RevenueMonthId == id && s.Side == SidePrev).ToListAsync();
+        decimal? Remaining(Func<RevenueMonthSnapshot, decimal?> progress) => prevSide.Count == 0
+            ? null
+            : Math.Round(prevSide.Sum(s => Math.Max(0m, 100m - (progress(s) ?? 0m)) / 100m * (s.Revenue ?? 0m)), 2, MidpointRounding.AwayFromZero);
+        var remStd = Remaining(s => s.ProgressStd);
+        var remAct = Remaining(s => s.ProgressAct);
+
+        var estStd = remStd is decimal cs && rawStd > cs ? cs : rawStd;
+        var estAct = remAct is decimal ca && rawAct > ca ? ca : rawAct;
+
+        return Ok(new RevenueMonthEstimateDto(
+            rawStd, rawAct, remStd, remAct, estStd, estAct,
+            estStd != rawStd, estAct != rawAct, [.. sources]));
+    }
+
     [HttpGet("{id:int}/export")]
     public async Task<IActionResult> Export(int id)
     {

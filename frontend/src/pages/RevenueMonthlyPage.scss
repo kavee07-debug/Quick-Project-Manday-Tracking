@@ -68,6 +68,36 @@
     font-size: var(--font-size-sm);
   }
 
+  // ----- forecast panel (shown until this month's snapshot is imported) -----
+  &__forecast {
+    margin-bottom: var(--space-4);
+    border-left: 4px solid var(--color-warning);
+  }
+  &__forecast-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  &__forecast-title { font-weight: var(--font-weight-bold); }
+  &__forecast-hint { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); }
+  &__forecast-value {
+    margin: var(--space-3) 0 var(--space-2);
+    font-size: calc(var(--font-size-xl) * 1.4);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-warning);
+  }
+  // Stand-in for the KPIs + table while only one snapshot side is in.
+  &__pending {
+    padding: var(--space-5);
+    text-align: center;
+  }
+  &__forecast-table {
+    margin-top: var(--space-3);
+    max-width: 520px;
+  }
+
   // ----- filter bar -----
   &__filterbar {
     display: flex;
