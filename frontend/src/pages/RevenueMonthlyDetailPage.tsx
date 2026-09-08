@@ -480,7 +480,9 @@ export default function RevenueMonthlyDetailPage() {
         </div>
         <div className={`statcard ${m.targetAmount == null ? 'statcard--navy' : kpi.total - m.targetAmount >= 0 ? 'statcard--green' : 'statcard--red'}`}>
           <div className="statcard__label" title="รายได้เดือนนี้ − Target">Diff vs Target</div>
-          <div className="statcard__value">
+          <div className={`statcard__value${m.targetAmount == null ? ''
+            : kpi.total - m.targetAmount > 0 ? ' under-budget'
+            : kpi.total - m.targetAmount < 0 ? ' over-budget' : ''}`}>
             {m.targetAmount == null ? <span className="muted">—</span>
               : `${kpi.total - m.targetAmount > 0 ? '+' : ''}${money(kpi.total - m.targetAmount)}`}
           </div>

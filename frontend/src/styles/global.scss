@@ -104,6 +104,10 @@ button {
     color: var(--color-text);
     font-variant-numeric: tabular-nums;
     line-height: 1.1;
+
+    // The card pins its own colour, so a state class has to be restated to win.
+    &.under-budget { color: var(--color-success); }
+    &.over-budget  { color: var(--color-danger); }
   }
   &--navy   { --accent: var(--color-navy); }
   &--blue   { --accent: var(--color-primary); }

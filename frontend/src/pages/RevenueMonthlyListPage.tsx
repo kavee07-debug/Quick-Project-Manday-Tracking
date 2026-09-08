@@ -12,6 +12,9 @@ export const periodLabel = (year: number, month: number) => `${TH_MONTH[month - 
 export const money = (n?: number | null) =>
   n == null ? '—' : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** Ahead of target reads green, behind reads red; exactly on target stays plain. */
+export const diffCls = (diff: number) => (diff > 0 ? ' under-budget' : diff < 0 ? ' over-budget' : '');
+
 /** Confirmed = closed and read-only; otherwise the revenue on screen is still an estimate. */
 export function RevenueStatusBadge({ confirmed }: { confirmed: boolean }) {
   return confirmed
@@ -108,15 +111,17 @@ export default function RevenueMonthlyListPage() {
               <th>ไฟล์เดือนนี้</th>
               <th className="num">จำนวน Job</th>
               <th className="num">รายได้ (Act.)</th>
+              <th className="num">Target</th>
+              <th className="num">Diff (Act. − Target)</th>
               <th className="num">รายได้ (Std.)</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="muted">กำลังโหลด…</td></tr>
+              <tr><td colSpan={10} className="muted">กำลังโหลด…</td></tr>
             ) : rows.length === 0 ? (
-              <tr><td colSpan={8} className="muted">ยังไม่มีงวด — กด “สร้างงวด” เพื่อเริ่ม</td></tr>
+              <tr><td colSpan={10} className="muted">ยังไม่มีงวด — กด “สร้างงวด” เพื่อเริ่ม</td></tr>
             ) : (
               rows.map((m) => (
                 <tr key={m.revenueMonthId}>
@@ -134,6 +139,11 @@ export default function RevenueMonthlyListPage() {
                     : <span className="muted">ยังไม่ import</span>}</td>
                   <td className="num">{m.jobCount}</td>
                   <td className="num">{money(m.totalAmountAct)}</td>
+                  <td className="num">{m.targetAmount == null ? <span className="muted">—</span> : money(m.targetAmount)}</td>
+                  <td className={`num${m.targetAmount == null ? '' : diffCls(m.totalAmountAct - m.targetAmount)}`}>
+                    {m.targetAmount == null ? <span className="muted">—</span>
+                      : `${m.totalAmountAct - m.targetAmount > 0 ? '+' : ''}${money(m.totalAmountAct - m.targetAmount)}`}
+                  </td>
                   <td className="num">{money(m.totalAmountStd)}</td>
                   <td className="num">
                     <span style={{ display: 'inline-flex', gap: 'var(--space-2)' }}>
