@@ -133,8 +133,7 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
     {
         var month = await db.RevenueMonths.FirstOrDefaultAsync(m => m.RevenueMonthId == id);
         if (month is null) return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
-        if (month.PrevImportedAt is null || month.CurrImportedAt is null)
-            return BadRequest(new { message = "ต้อง import ข้อมูลครบทั้ง 2 ฝั่งก่อนจึงจะ Confirm Revenue ได้" });
+        // No import required: a back-dated period may be nothing but hand-keyed lines.
 
         month.IsConfirmed = true;
         month.ConfirmedAt = DateTime.UtcNow;

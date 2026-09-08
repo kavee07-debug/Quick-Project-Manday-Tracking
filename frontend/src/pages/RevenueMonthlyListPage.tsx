@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import type { RevenueMonth, RevenueMonthCreate, RevenueMonthSetting } from '../api/types';
@@ -48,6 +48,9 @@ export default function RevenueMonthlyListPage() {
   const [showSetup, setShowSetup] = useState(false);
   const [setupTarget, setSetupTarget] = useState('');
   const [setupError, setSetupError] = useState<string | null>(null);
+
+  const [yearFilter, setYearFilter] = useState<Set<number>>(new Set());
+  const [monthFilter, setMonthFilter] = useState<Set<number>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,6 +121,39 @@ export default function RevenueMonthlyListPage() {
     }
   }
 
+  // Chips are built from the periods that exist, so there are no dead options.
+  const yearOptions = useMemo(() => {
+    const c = new Map<number, number>();
+    rows.forEach((m) => c.set(m.periodYear, (c.get(m.periodYear) ?? 0) + 1));
+    return [...c.entries()].sort((a, b) => b[0] - a[0]);
+  }, [rows]);
+  const monthOptions = useMemo(() => {
+    const c = new Map<number, number>();
+    rows.forEach((m) => c.set(m.periodMonth, (c.get(m.periodMonth) ?? 0) + 1));
+    return [...c.entries()].sort((a, b) => a[0] - b[0]);
+  }, [rows]);
+
+  const filtered = useMemo(() => rows.filter((m) =>
+    (yearFilter.size === 0 || yearFilter.has(m.periodYear)) &&
+    (monthFilter.size === 0 || monthFilter.has(m.periodMonth))), [rows, yearFilter, monthFilter]);
+
+  // Totals follow the filter, so a year (or one month across years) adds up on its own.
+  const totals = useMemo(() => filtered.reduce((a, m) => ({
+    jobs: a.jobs + m.jobCount,
+    act: a.act + m.totalAmountAct,
+    std: a.std + m.totalAmountStd,
+    target: a.target + (m.targetAmount ?? 0),
+    withTarget: a.withTarget + (m.targetAmount == null ? 0 : 1),
+  }), { jobs: 0, act: 0, std: 0, target: 0, withTarget: 0 }), [filtered]);
+
+  function toggle(setFilter: typeof setYearFilter, value: number) {
+    setFilter((cur) => {
+      const next = new Set(cur);
+      next.has(value) ? next.delete(value) : next.add(value);
+      return next;
+    });
+  }
+
   const years: number[] = [];
   for (let y = new Date().getFullYear() + 1; y >= 2020; y--) years.push(y);
 
@@ -138,6 +174,76 @@ export default function RevenueMonthlyListPage() {
 
       {error && <p className="error-text">{error}</p>}
 
+      <div className="rmon__filterbar">
+        <span className="rmon__filterbar-label">ปี:</span>
+        {yearOptions.map(([y, n]) => {
+          const active = yearFilter.has(y);
+          return (
+            <button key={y} type="button" className={`status-chip badge--blue ${active ? 'is-active' : ''}`}
+              aria-pressed={active} onClick={() => toggle(setYearFilter, y)}>
+              <span className="status-chip__name">{y}</span>
+              <span className="status-chip__count">{n}</span>
+            </button>
+          );
+        })}
+
+        <span className="rmon__filterbar-sep" aria-hidden="true" />
+
+        <span className="rmon__filterbar-label">เดือน:</span>
+        {monthOptions.map(([mo, n]) => {
+          const active = monthFilter.has(mo);
+          return (
+            <button key={mo} type="button" className={`status-chip badge--green ${active ? 'is-active' : ''}`}
+              aria-pressed={active} onClick={() => toggle(setMonthFilter, mo)}>
+              <span className="status-chip__name">{TH_MONTH[mo - 1]}</span>
+              <span className="status-chip__count">{n}</span>
+            </button>
+          );
+        })}
+
+        {(yearFilter.size > 0 || monthFilter.size > 0) && (
+          <button type="button" className="btn btn--sm"
+            onClick={() => { setYearFilter(new Set()); setMonthFilter(new Set()); }}>
+            ล้างตัวกรอง
+          </button>
+        )}
+        <span className="muted">แสดง {filtered.length} / {rows.length} งวด</span>
+      </div>
+
+      <div className="kpi-grid rmon__kpi">
+        <div className="statcard statcard--navy">
+          <div className="statcard__label">จำนวนงวด</div>
+          <div className="statcard__value">{filtered.length}</div>
+        </div>
+        <div className="statcard statcard--teal">
+          <div className="statcard__label">รายได้รวม (Act.)</div>
+          <div className="statcard__value">{money(totals.act)}</div>
+        </div>
+        <div className="statcard statcard--blue">
+          <div className="statcard__label">
+            Target รวม
+            {totals.withTarget > 0 && totals.withTarget < filtered.length && (
+              <span className="muted"> · ตั้งไว้ {totals.withTarget}/{filtered.length} งวด</span>
+            )}
+          </div>
+          <div className="statcard__value">
+            {totals.withTarget === 0 ? <span className="muted">—</span> : money(totals.target)}
+          </div>
+        </div>
+        <div className={`statcard ${totals.withTarget === 0 ? 'statcard--navy'
+          : totals.act - totals.target >= 0 ? 'statcard--green' : 'statcard--red'}`}>
+          <div className="statcard__label" title="รายได้รวม (Act.) − Target รวม">Diff vs Target</div>
+          <div className={`statcard__value${totals.withTarget === 0 ? '' : diffCls(totals.act - totals.target)}`}>
+            {totals.withTarget === 0 ? <span className="muted">—</span>
+              : `${totals.act - totals.target > 0 ? '+' : ''}${money(totals.act - totals.target)}`}
+          </div>
+        </div>
+        <div className="statcard statcard--amber">
+          <div className="statcard__label">รายได้รวม (Std.)</div>
+          <div className="statcard__value">{money(totals.std)}</div>
+        </div>
+      </div>
+
       <div className="card">
         <table className="table">
           <thead>
@@ -157,10 +263,12 @@ export default function RevenueMonthlyListPage() {
           <tbody>
             {loading ? (
               <tr><td colSpan={10} className="muted">กำลังโหลด…</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td colSpan={10} className="muted">ยังไม่มีงวด — กด “สร้างงวด” เพื่อเริ่ม</td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={10} className="muted">
+                {rows.length === 0 ? 'ยังไม่มีงวด — กด “สร้างงวด” เพื่อเริ่ม' : 'ไม่มีงวดที่ตรงกับตัวกรอง'}
+              </td></tr>
             ) : (
-              rows.map((m) => (
+              filtered.map((m) => (
                 <tr key={m.revenueMonthId}>
                   <td className="nowrap">
                     {/* real <a href> so Ctrl/middle/right-click can open the period in a new tab */}
