@@ -62,13 +62,19 @@ public record ResourceTimelineRow(int ResourceId, string Code, string Name, stri
 public record RevenueMonthDto(int RevenueMonthId, int PeriodYear, int PeriodMonth, string? Note,
     string? PrevFileName, string? PrevReportInfo, DateTime? PrevImportedAt, int PrevJobCount,
     string? CurrFileName, string? CurrReportInfo, DateTime? CurrImportedAt, int CurrJobCount,
+    bool IsConfirmed, DateTime? ConfirmedAt, string? ConfirmedBy,
     int JobCount, decimal TotalAmountStd, decimal TotalAmountAct);
 public record RevenueMonthCreate(int PeriodYear, int PeriodMonth, string? Note);
 public record RevenueMonthLineDto(string JobNo, string? JobName, string? Customer, string? Pm,
     string? StdGroup, string? Stage, decimal? Revenue, decimal? PrevRevenue, bool RevenueChanged,
     decimal PrevStd, decimal CurrStd, decimal DeltaStd, decimal AmountStd,
     decimal PrevAct, decimal CurrAct, decimal DeltaAct, decimal AmountAct,
-    string Status, int MergedRowCount);
+    string Status, int MergedRowCount,
+    // Manual correction of this month's %: flags plus the imported value it replaced.
+    bool EditedStd, bool EditedAct, decimal? ImportedStd, decimal? ImportedAct,
+    DateTime? OverrideAt, string? OverrideBy);
+// Sets (or with a null Value clears) the manual override of this month's % for one job.
+public record RevenueMonthOverrideRequest(string JobNo, string Basis, decimal? Value);
 public record RevenueMonthDetailDto(RevenueMonthDto Month, RevenueMonthLineDto[] Lines);
 // One completed period feeding the estimate, with the weight it carried.
 public record RevenueMonthEstimateSource(int PeriodYear, int PeriodMonth, decimal AmountStd, decimal AmountAct, int Weight);

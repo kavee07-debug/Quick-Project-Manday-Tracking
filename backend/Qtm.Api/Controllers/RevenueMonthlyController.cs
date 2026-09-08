@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +24,8 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
 {
     private const string SidePrev = "Prev";
     private const string SideCurr = "Curr";
+    private const string ConfirmedLockMessage =
+        "งวดนี้ Confirm Revenue แล้ว — แก้ไขไม่ได้ (กด Reopen ก่อนถ้าต้องการแก้)";
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<RevenueMonthDto>>> List()
@@ -46,9 +49,18 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
         var month = await db.RevenueMonths.FirstOrDefaultAsync(m => m.RevenueMonthId == id);
         if (month is null) return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
 
-        var lines = Compute(await db.RevenueMonthSnapshots.Where(s => s.RevenueMonthId == id).ToListAsync());
+        return await BuildDetail(month);
+    }
+
+    private async Task<ActionResult<RevenueMonthDetailDto>> BuildDetail(RevenueMonth month)
+    {
+        var lines = Compute(await db.RevenueMonthSnapshots
+            .Where(s => s.RevenueMonthId == month.RevenueMonthId).ToListAsync());
         return Ok(new RevenueMonthDetailDto(ToDto(month, lines), [.. lines]));
     }
+
+    private string CurrentUser() =>
+        User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "unknown";
 
     [HttpPost]
     [Authorize(Roles = Roles.Managers)]
@@ -73,12 +85,47 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
         return Ok(ToDto(month, []));
     }
 
+    /// <summary>Closes the month: the figures become final and the period turns read-only.</summary>
+    [HttpPost("{id:int}/confirm")]
+    [Authorize(Roles = Roles.Managers)]
+    public async Task<ActionResult<RevenueMonthDetailDto>> Confirm(int id)
+    {
+        var month = await db.RevenueMonths.FirstOrDefaultAsync(m => m.RevenueMonthId == id);
+        if (month is null) return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
+        if (month.PrevImportedAt is null || month.CurrImportedAt is null)
+            return BadRequest(new { message = "ต้อง import ข้อมูลครบทั้ง 2 ฝั่งก่อนจึงจะ Confirm Revenue ได้" });
+
+        month.IsConfirmed = true;
+        month.ConfirmedAt = DateTime.UtcNow;
+        month.ConfirmedBy = CurrentUser();
+        month.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return await BuildDetail(month);
+    }
+
+    /// <summary>Reopens a confirmed month so it can be corrected again.</summary>
+    [HttpPost("{id:int}/reopen")]
+    [Authorize(Roles = Roles.Managers)]
+    public async Task<ActionResult<RevenueMonthDetailDto>> Reopen(int id)
+    {
+        var month = await db.RevenueMonths.FirstOrDefaultAsync(m => m.RevenueMonthId == id);
+        if (month is null) return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
+
+        month.IsConfirmed = false;
+        month.ConfirmedAt = null;
+        month.ConfirmedBy = null;
+        month.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return await BuildDetail(month);
+    }
+
     [HttpDelete("{id:int}")]
     [Authorize(Roles = Roles.Managers)]
     public async Task<IActionResult> Delete(int id)
     {
         var month = await db.RevenueMonths.FirstOrDefaultAsync(m => m.RevenueMonthId == id);
         if (month is null) return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
+        if (month.IsConfirmed) return BadRequest(new { message = ConfirmedLockMessage });
         db.RevenueMonths.Remove(month);
         await db.SaveChangesAsync();
         return NoContent();
@@ -95,6 +142,7 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
 
         var month = await db.RevenueMonths.FirstOrDefaultAsync(m => m.RevenueMonthId == id);
         if (month is null) return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
+        if (month.IsConfirmed) return BadRequest(new { message = ConfirmedLockMessage });
 
         StdProgressReport report;
         try
@@ -172,6 +220,65 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
         await db.SaveChangesAsync();
 
         return Ok(new ImportResult(snapshots.Count, 0, report.Rows.Count - snapshots.Count, errors));
+    }
+
+    /// <summary>
+    /// Sets (or with a null Value clears) the hand-corrected % for one job in this month. The
+    /// imported figure is left alone, so the screen can still show what the file said.
+    /// </summary>
+    [HttpPut("{id:int}/override")]
+    [Authorize(Roles = Roles.Managers)]
+    public async Task<ActionResult<RevenueMonthDetailDto>> SetOverride(int id, RevenueMonthOverrideRequest req)
+    {
+        var month = await db.RevenueMonths.FirstOrDefaultAsync(m => m.RevenueMonthId == id);
+        if (month is null) return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
+        if (month.IsConfirmed) return BadRequest(new { message = ConfirmedLockMessage });
+        if (string.IsNullOrWhiteSpace(req.JobNo)) return BadRequest(new { message = "ต้องระบุ Job No" });
+
+        var basis = req.Basis?.Trim().ToLowerInvariant();
+        if (basis is not ("std" or "act")) return BadRequest(new { message = "basis ต้องเป็น std หรือ act" });
+        if (req.Value is decimal v && (v < 0m || v > 100m))
+            return BadRequest(new { message = "% ต้องอยู่ระหว่าง 0 ถึง 100" });
+
+        var jobNo = req.JobNo.Trim();
+        var row = await db.RevenueMonthSnapshots
+            .FirstOrDefaultAsync(s => s.RevenueMonthId == id && s.Side == SideCurr && s.JobNo == jobNo);
+
+        if (row is null)
+        {
+            // Nothing imported for this job this month. Clearing is a no-op; setting a % needs a row,
+            // so carry the job's details over from the previous month's snapshot.
+            if (req.Value is null) return await BuildDetail(month);
+
+            var prev = await db.RevenueMonthSnapshots
+                .FirstOrDefaultAsync(s => s.RevenueMonthId == id && s.Side == SidePrev && s.JobNo == jobNo);
+            if (prev is null) return NotFound(new { message = $"ไม่พบ Job '{jobNo}' ในงวดนี้" });
+
+            row = new RevenueMonthSnapshot
+            {
+                RevenueMonthId = id,
+                Side = SideCurr,
+                JobNo = prev.JobNo,
+                JobName = prev.JobName,
+                Customer = prev.Customer,
+                Pm = prev.Pm,
+                StdGroup = prev.StdGroup,
+                Stage = prev.Stage,
+                Revenue = prev.Revenue,
+                CreatedAt = DateTime.UtcNow,
+            };
+            db.RevenueMonthSnapshots.Add(row);
+        }
+
+        if (basis == "std") row.OverrideProgressStd = req.Value;
+        else row.OverrideProgressAct = req.Value;
+
+        var stillEdited = row.OverrideProgressStd is not null || row.OverrideProgressAct is not null;
+        row.OverrideAt = stillEdited ? DateTime.UtcNow : null;
+        row.OverrideBy = stillEdited ? CurrentUser() : null;
+
+        await db.SaveChangesAsync();
+        return await BuildDetail(month);
     }
 
     /// <summary>
@@ -268,6 +375,7 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
         new(m.RevenueMonthId, m.PeriodYear, m.PeriodMonth, m.Note,
             m.PrevFileName, m.PrevReportInfo, m.PrevImportedAt, m.PrevJobCount,
             m.CurrFileName, m.CurrReportInfo, m.CurrImportedAt, m.CurrJobCount,
+            m.IsConfirmed, m.ConfirmedAt, m.ConfirmedBy,
             lines.Count, lines.Sum(l => l.AmountStd), lines.Sum(l => l.AmountAct));
 
     /// <summary>Full-outer-joins the two snapshot sides by Job No. and derives the month's revenue per job.</summary>
@@ -288,9 +396,11 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
             var revenue = c?.Revenue ?? p?.Revenue;
             // A side with no row for this job counts as 0% (a brand-new job recognises its full progress).
             var prevStd = p?.ProgressStd ?? 0m;
-            var currStd = c?.ProgressStd ?? 0m;
             var prevAct = p?.ProgressAct ?? 0m;
-            var currAct = c?.ProgressAct ?? 0m;
+            // A hand-corrected % replaces the imported one; the imported value is still reported so
+            // the screen can show what was changed.
+            var currStd = c?.OverrideProgressStd ?? c?.ProgressStd ?? 0m;
+            var currAct = c?.OverrideProgressAct ?? c?.ProgressAct ?? 0m;
 
             // Signed on purpose: progress (or the project value) can move backwards, and that has to
             // show up as negative revenue for the month rather than silently disappear.
@@ -310,7 +420,13 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
                 PrevStd: prevStd, CurrStd: currStd, DeltaStd: currStd - prevStd, AmountStd: Amount(currStd - prevStd),
                 PrevAct: prevAct, CurrAct: currAct, DeltaAct: currAct - prevAct, AmountAct: Amount(currAct - prevAct),
                 Status: p is null ? "New" : c is null ? "Gone" : "Normal",
-                MergedRowCount: Math.Max(p?.MergedRowCount ?? 1, c?.MergedRowCount ?? 1)));
+                MergedRowCount: Math.Max(p?.MergedRowCount ?? 1, c?.MergedRowCount ?? 1),
+                EditedStd: c?.OverrideProgressStd is not null,
+                EditedAct: c?.OverrideProgressAct is not null,
+                ImportedStd: c?.ProgressStd,
+                ImportedAct: c?.ProgressAct,
+                OverrideAt: c?.OverrideAt,
+                OverrideBy: c?.OverrideBy));
         }
         return lines;
     }

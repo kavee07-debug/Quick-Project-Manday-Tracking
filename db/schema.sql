@@ -375,6 +375,11 @@ CREATE TABLE dbo.RevenueMonth (
     CurrReportInfo NVARCHAR(500) NULL,
     CurrImportedAt DATETIME2(0)  NULL,
     CurrJobCount   INT NOT NULL CONSTRAINT DF_RevenueMonth_CurrJobCount DEFAULT (0),
+    -- Confirm = the month is closed: figures final, period read-only until reopened.
+    -- Until then the screen labels the revenue "Est Revenue".
+    IsConfirmed    BIT NOT NULL CONSTRAINT DF_RevenueMonth_IsConfirmed DEFAULT (0),
+    ConfirmedAt    DATETIME2(0)  NULL,
+    ConfirmedBy    NVARCHAR(200) NULL,
     CreatedAt      DATETIME2(0) NOT NULL CONSTRAINT DF_RevenueMonth_CreatedAt DEFAULT (SYSUTCDATETIME()),
     UpdatedAt      DATETIME2(0) NULL,
     CONSTRAINT UQ_RevenueMonth_Period UNIQUE (PeriodYear, PeriodMonth),
@@ -397,6 +402,12 @@ CREATE TABLE dbo.RevenueMonthSnapshot (
     ProgressAct     DECIMAL(9,4)  NULL,        -- "% Progress by Act. Time sheet" (0..100)
     RevenueProgress DECIMAL(18,2) NULL,        -- report's own recognised-to-date amount
     MergedRowCount  INT NOT NULL CONSTRAINT DF_RevenueMonthSnapshot_Merged DEFAULT (1),
+    -- This month's % corrected by hand on screen; the imported value above stays untouched.
+    -- Re-importing the side drops the row, so the file always wins over an old edit.
+    OverrideProgressStd DECIMAL(9,4)  NULL,
+    OverrideProgressAct DECIMAL(9,4)  NULL,
+    OverrideAt      DATETIME2(0)  NULL,
+    OverrideBy      NVARCHAR(200) NULL,
     CreatedAt       DATETIME2(0) NOT NULL CONSTRAINT DF_RevenueMonthSnapshot_CreatedAt DEFAULT (SYSUTCDATETIME()),
     CONSTRAINT FK_RevenueMonthSnapshot_Month FOREIGN KEY (RevenueMonthId)
         REFERENCES dbo.RevenueMonth(RevenueMonthId) ON DELETE CASCADE,

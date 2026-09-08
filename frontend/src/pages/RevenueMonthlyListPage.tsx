@@ -12,6 +12,13 @@ export const periodLabel = (year: number, month: number) => `${TH_MONTH[month - 
 export const money = (n?: number | null) =>
   n == null ? '—' : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** Confirmed = closed and read-only; otherwise the revenue on screen is still an estimate. */
+export function RevenueStatusBadge({ confirmed }: { confirmed: boolean }) {
+  return confirmed
+    ? <span className="badge badge--green">Confirm Revenue</span>
+    : <span className="badge badge--orange">Est Revenue</span>;
+}
+
 function defaultForm(): RevenueMonthCreate {
   // Default to the month that just ended — that is the one being closed.
   const d = new Date();
@@ -96,6 +103,7 @@ export default function RevenueMonthlyListPage() {
           <thead>
             <tr>
               <th>งวด</th>
+              <th>สถานะ</th>
               <th>ไฟล์เดือนก่อน</th>
               <th>ไฟล์เดือนนี้</th>
               <th className="num">จำนวน Job</th>
@@ -106,9 +114,9 @@ export default function RevenueMonthlyListPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="muted">กำลังโหลด…</td></tr>
+              <tr><td colSpan={8} className="muted">กำลังโหลด…</td></tr>
             ) : rows.length === 0 ? (
-              <tr><td colSpan={7} className="muted">ยังไม่มีงวด — กด “สร้างงวด” เพื่อเริ่ม</td></tr>
+              <tr><td colSpan={8} className="muted">ยังไม่มีงวด — กด “สร้างงวด” เพื่อเริ่ม</td></tr>
             ) : (
               rows.map((m) => (
                 <tr key={m.revenueMonthId}>
@@ -117,6 +125,7 @@ export default function RevenueMonthlyListPage() {
                     <Link to={`/revenue-monthly/${m.revenueMonthId}`}>{periodLabel(m.periodYear, m.periodMonth)}</Link>
                     {m.note && <div className="muted rmon__note">{m.note}</div>}
                   </td>
+                  <td className="nowrap"><RevenueStatusBadge confirmed={m.isConfirmed} /></td>
                   <td>{m.prevImportedAt
                     ? <span className="badge badge--green">{m.prevJobCount} job</span>
                     : <span className="muted">ยังไม่ import</span>}</td>
@@ -129,7 +138,7 @@ export default function RevenueMonthlyListPage() {
                   <td className="num">
                     <span style={{ display: 'inline-flex', gap: 'var(--space-2)' }}>
                       <button className="btn btn--sm" onClick={() => navigate(`/revenue-monthly/${m.revenueMonthId}`)}>เปิด</button>
-                      {isManager && <button className="btn btn--sm btn--danger" onClick={() => remove(m)}>ลบ</button>}
+                      {isManager && !m.isConfirmed && <button className="btn btn--sm btn--danger" onClick={() => remove(m)}>ลบ</button>}
                     </span>
                   </td>
                 </tr>

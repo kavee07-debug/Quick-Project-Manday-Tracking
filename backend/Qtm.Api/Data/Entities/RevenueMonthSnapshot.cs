@@ -22,6 +22,13 @@ public class RevenueMonthSnapshot
     public decimal? RevenueProgress { get; set; }          // report's own recognised-to-date amount
     public int MergedRowCount { get; set; } = 1;           // how many raw rows collapsed into this one
 
+    // Manual corrections to this month's %, kept beside the imported value so the original stays
+    // visible. Re-importing the side replaces the row, so the file always wins over an old edit.
+    public decimal? OverrideProgressStd { get; set; }
+    public decimal? OverrideProgressAct { get; set; }
+    public DateTime? OverrideAt { get; set; }
+    public string? OverrideBy { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public RevenueMonth? Month { get; set; }

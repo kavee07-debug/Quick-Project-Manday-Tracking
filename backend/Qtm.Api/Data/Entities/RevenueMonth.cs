@@ -22,6 +22,12 @@ public class RevenueMonth
     public DateTime? CurrImportedAt { get; set; }
     public int CurrJobCount { get; set; }
 
+    // Confirm = the month is closed: the figures are final and the period is read-only until reopened.
+    // Until then the revenue on screen is an estimate ("Est Revenue").
+    public bool IsConfirmed { get; set; }
+    public DateTime? ConfirmedAt { get; set; }
+    public string? ConfirmedBy { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 

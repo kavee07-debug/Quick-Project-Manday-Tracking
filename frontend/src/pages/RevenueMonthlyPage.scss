@@ -135,6 +135,28 @@
     th { white-space: nowrap; }
   }
   &__sortable { cursor: pointer; user-select: none; }
+
+  // A row whose "% เดือนนี้" was corrected by hand reads blue end to end.
+  &__row--edited td { color: var(--color-primary); }
+
+  &__statustag { margin-left: var(--space-3); vertical-align: middle; }
+  &__currcell { white-space: nowrap; }
+  &__iconbtn {
+    border: none;
+    background: none;
+    padding: 0 var(--space-1);
+    margin-left: var(--space-1);
+    cursor: pointer;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-base);
+    &:hover { color: var(--color-primary); }
+    &:disabled { cursor: default; opacity: 0.5; }
+  }
+  &__editinput {
+    width: 96px;
+    padding: 2px var(--space-2);
+    text-align: right;
+  }
   &__amount { font-weight: var(--font-weight-bold); }
   &__tag { margin-left: var(--space-2); }
   &__totallabel { color: var(--color-text-muted); }

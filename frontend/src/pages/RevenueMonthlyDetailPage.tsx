@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import type { ImportResult, RevenueMonthDetail, RevenueMonthEstimate, RevenueMonthLine } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
-import { money, periodLabel } from './RevenueMonthlyListPage';
+import { money, periodLabel, RevenueStatusBadge } from './RevenueMonthlyListPage';
 import { RefreshButton } from '../components/RefreshButton';
 import './RevenueMonthlyPage.scss';
 
@@ -81,6 +81,9 @@ export default function RevenueMonthlyDetailPage() {
   const [result, setResult] = useState<{ side: Side; res: ImportResult } | null>(null);
   const [estimate, setEstimate] = useState<RevenueMonthEstimate | null>(null);
   const [estimating, setEstimating] = useState(false);
+  const [editingJob, setEditingJob] = useState<string | null>(null);   // job whose % is being typed
+  const [editValue, setEditValue] = useState('');
+  const [savingJob, setSavingJob] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -141,15 +144,17 @@ export default function RevenueMonthlyDetailPage() {
   }, [filtered, sort, basis]);
 
   const kpi = useMemo(() => {
-    let total = 0, earning = 0, fresh = 0, backwards = 0;
+    let total = 0, earning = 0, fresh = 0, backwards = 0, backlog = 0;
     for (const l of filtered) {
       const v = view(l, basis);
       total += v.amount;
       if (v.amount > 0) earning++;
       if (l.status === 'New') fresh++;
       if (v.delta < 0) backwards++;
+      // Backlog = the part of each project's value not recognised yet at this month's %.
+      backlog += Math.max(0, 100 - v.curr) / 100 * (l.revenue ?? 0);
     }
-    return { total, earning, fresh, backwards };
+    return { total, earning, fresh, backwards, backlog };
   }, [filtered, basis]);
 
   function toggleSort(key: SortKey) {
@@ -158,6 +163,40 @@ export default function RevenueMonthlyDetailPage() {
       : { key, dir: key === 'jobNo' || key === 'customer' ? 'asc' : 'desc' }));
   }
   const sortArrow = (key: SortKey) => (sort.key === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '');
+
+  /** Confirm closes the month (read-only); Reopen puts it back to "Est Revenue". */
+  async function setConfirmed(confirm: boolean) {
+    if (confirm && !window.confirm('Confirm Revenue งวดนี้? หลังจากนี้จะแก้ไข/import/ลบไม่ได้จนกว่าจะกด Reopen')) return;
+    setError(null);
+    try {
+      setData(await api.post<RevenueMonthDetail>(`/revenue-monthly/${id}/${confirm ? 'confirm' : 'reopen'}`, {}));
+      setEditingJob(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'เปลี่ยนสถานะไม่สำเร็จ');
+    }
+  }
+
+  /** Writes (or with value = null clears) the hand-corrected % for one job on the active basis. */
+  async function saveOverride(jobNo: string, value: number | null) {
+    setSavingJob(jobNo);
+    setError(null);
+    try {
+      setData(await api.put<RevenueMonthDetail>(`/revenue-monthly/${id}/override`, { jobNo, basis, value }));
+      setEditingJob(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'บันทึกการแก้ไขไม่สำเร็จ');
+    } finally {
+      setSavingJob(null);
+    }
+  }
+
+  function commitEdit(jobNo: string, currentValue: number) {
+    const raw = editValue.trim();
+    const num = Number(raw);
+    if (raw === '' || Number.isNaN(num) || num < 0 || num > 100) { setEditingJob(null); return; }
+    if (num === currentValue) { setEditingJob(null); return; }   // nothing actually changed
+    saveOverride(jobNo, num);
+  }
 
   async function loadEstimate() {
     setEstimating(true);
@@ -196,13 +235,24 @@ export default function RevenueMonthlyDetailPage() {
         <h1 className="rmon__title">
           <Link className="rmon__back" to="/revenue-monthly">← Revenue Monthly</Link>
           <span> / งวด {periodLabel(m.periodYear, m.periodMonth)}</span>
+          <span className="rmon__statustag"><RevenueStatusBadge confirmed={m.isConfirmed} /></span>
         </h1>
         <div className="head-actions">
           <RefreshButton onRefresh={load} />
           <button className="btn btn--sm" onClick={doExport}>⬇ Export .xlsx</button>
+          {isManager && (m.isConfirmed
+            ? <button className="btn btn--sm btn--navy" onClick={() => setConfirmed(false)}>Reopen</button>
+            : <button className="btn btn--sm btn--primary" onClick={() => setConfirmed(true)}>✓ Confirm Revenue</button>)}
         </div>
       </div>
       {m.note && <p className="muted rmon__hint">{m.note}</p>}
+      {m.isConfirmed && (
+        <p className="muted rmon__hint">
+          🔒 งวดนี้ Confirm Revenue แล้ว{m.confirmedBy ? ` โดย ${m.confirmedBy}` : ''}
+          {m.confirmedAt ? ` เมื่อ ${fmtDateTime(m.confirmedAt)}` : ''} — ตัวเลขถือเป็นค่าสุดท้าย แก้ไข/import/ลบไม่ได้
+          จนกว่าจะกด Reopen
+        </p>
+      )}
 
       {error && <p className="error-text">{error}</p>}
 
@@ -211,13 +261,13 @@ export default function RevenueMonthlyDetailPage() {
           label="1) ข้อมูล ณ สิ้นเดือนก่อน"
           hint={`Standard Progress vs Actual Progress Summary ณ สิ้นเดือน ${prevMonth.mo}/${prevMonth.y}`}
           fileName={m.prevFileName} importedAt={m.prevImportedAt} jobCount={m.prevJobCount}
-          reportInfo={m.prevReportInfo} canImport={isManager} busy={busySide === 'prev'}
+          reportInfo={m.prevReportInfo} canImport={isManager && !m.isConfirmed} busy={busySide === 'prev'}
           onPick={(f) => importSide('prev', f)} />
         <ImportSlot
           label="2) ข้อมูล ณ สิ้นเดือนนี้"
           hint={`Standard Progress vs Actual Progress Summary ณ สิ้นเดือน ${m.periodMonth}/${m.periodYear}`}
           fileName={m.currFileName} importedAt={m.currImportedAt} jobCount={m.currJobCount}
-          reportInfo={m.currReportInfo} canImport={isManager} busy={busySide === 'curr'}
+          reportInfo={m.currReportInfo} canImport={isManager && !m.isConfirmed} busy={busySide === 'curr'}
           onPick={(f) => importSide('curr', f)} />
       </div>
 
@@ -338,6 +388,12 @@ export default function RevenueMonthlyDetailPage() {
           <div className="statcard__label">Job ที่ % ถอยหลัง</div>
           <div className="statcard__value">{kpi.backwards}</div>
         </div>
+        <div className="statcard statcard--amber">
+          <div className="statcard__label" title="Σ (100% − % เดือนนี้) × มูลค่าโครงการ">
+            Backlog · รอรับรู้อีก
+          </div>
+          <div className="statcard__value">{money(kpi.backlog)}</div>
+        </div>
       </div>
 
       <div className="card">
@@ -363,8 +419,10 @@ export default function RevenueMonthlyDetailPage() {
             ) : (
               sorted.map((l) => {
                 const v = view(l, basis);
+                const edited = basis === 'act' ? l.editedAct : l.editedStd;
+                const imported = basis === 'act' ? l.importedAct : l.importedStd;
                 return (
-                  <tr key={l.jobNo}>
+                  <tr key={l.jobNo} className={edited ? 'rmon__row--edited' : ''}>
                     <td className="nowrap">{l.jobNo}</td>
                     <td>{l.jobName}</td>
                     <td>{l.customer}</td>
@@ -378,7 +436,32 @@ export default function RevenueMonthlyDetailPage() {
                       )}
                     </td>
                     <td className="num">{pct(v.prev)}</td>
-                    <td className="num">{pct(v.curr)}</td>
+                    <td className="num rmon__currcell">
+                      {editingJob === l.jobNo ? (
+                        <input className="input rmon__editinput" type="number" step="0.01" min="0" max="100"
+                          autoFocus value={editValue} disabled={savingJob === l.jobNo}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); commitEdit(l.jobNo, v.curr); }
+                            if (e.key === 'Escape') setEditingJob(null);
+                          }}
+                          onBlur={() => commitEdit(l.jobNo, v.curr)} />
+                      ) : (
+                        <>
+                          {pct(v.curr)}
+                          {isManager && !m.isConfirmed && (
+                            <button type="button" className="rmon__iconbtn" title="แก้ไข % เดือนนี้"
+                              onClick={() => { setEditingJob(l.jobNo); setEditValue(String(v.curr)); }}>✏</button>
+                          )}
+                          {edited && isManager && !m.isConfirmed && (
+                            <button type="button" className="rmon__iconbtn" disabled={savingJob === l.jobNo}
+                              title={`แก้จากค่าที่ import ${imported == null ? '(ไม่มีในไฟล์)' : pct(imported)}`
+                                + (l.overrideBy ? ` โดย ${l.overrideBy}` : '') + ' — กดเพื่อคืนค่าเดิม'}
+                              onClick={() => saveOverride(l.jobNo, null)}>↺</button>
+                          )}
+                        </>
+                      )}
+                    </td>
                     <td className={`num ${v.delta < 0 ? 'over-budget' : ''}`}>
                       {v.delta > 0 ? '+' : ''}{pct(v.delta)}
                     </td>

@@ -275,6 +275,7 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.Property(x => x.CurrFileName).HasMaxLength(260);
             e.Property(x => x.PrevReportInfo).HasMaxLength(500);
             e.Property(x => x.CurrReportInfo).HasMaxLength(500);
+            e.Property(x => x.ConfirmedBy).HasMaxLength(200);
             e.HasIndex(x => new { x.PeriodYear, x.PeriodMonth }).IsUnique();
         });
 
@@ -293,6 +294,9 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.Property(x => x.RevenueProgress).HasColumnType("decimal(18,2)");
             e.Property(x => x.ProgressStd).HasColumnType("decimal(9,4)");
             e.Property(x => x.ProgressAct).HasColumnType("decimal(9,4)");
+            e.Property(x => x.OverrideProgressStd).HasColumnType("decimal(9,4)");
+            e.Property(x => x.OverrideProgressAct).HasColumnType("decimal(9,4)");
+            e.Property(x => x.OverrideBy).HasMaxLength(200);
             e.HasIndex(x => new { x.RevenueMonthId, x.Side, x.JobNo }).IsUnique();
             e.HasOne(x => x.Month)
                 .WithMany(m => m.Snapshots)

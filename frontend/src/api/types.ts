@@ -400,6 +400,10 @@ export interface RevenueMonth {
   currReportInfo?: string | null;
   currImportedAt?: string | null;
   currJobCount: number;
+  // Confirmed = the month is closed: figures final, period read-only. Until then it is "Est Revenue".
+  isConfirmed: boolean;
+  confirmedAt?: string | null;
+  confirmedBy?: string | null;
   jobCount: number;
   totalAmountStd: number;
   totalAmountAct: number;
@@ -425,6 +429,19 @@ export interface RevenueMonthLine {
   prevAct: number; currAct: number; deltaAct: number; amountAct: number;
   status: RevenueLineStatus;
   mergedRowCount: number;
+  // Manual correction of this month's %: flags plus the imported value it replaced.
+  editedStd: boolean;
+  editedAct: boolean;
+  importedStd?: number | null;
+  importedAct?: number | null;
+  overrideAt?: string | null;
+  overrideBy?: string | null;
+}
+/** Sets (or with value = null clears) the manual override of this month's % for one job. */
+export interface RevenueMonthOverrideRequest {
+  jobNo: string;
+  basis: 'std' | 'act';
+  value: number | null;
 }
 export interface RevenueMonthDetail {
   month: RevenueMonth;
