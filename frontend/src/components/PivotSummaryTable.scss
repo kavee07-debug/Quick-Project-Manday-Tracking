@@ -88,6 +88,13 @@
     background: var(--color-bg);
     border-bottom: 2px solid var(--color-border);
   }
+
+  // The grand-total row and the Total column both pin their own colour, which would otherwise
+  // outrank the single-class Remaining state — restate it so those cells stay green/red too.
+  &__totalrow td.under-budget,
+  &__totalcol.under-budget { color: var(--color-success); }
+  &__totalrow td.over-budget,
+  &__totalcol.over-budget { color: var(--color-danger); }
 }
 
 // Explain breakdown table: full gridlines + zebra striping for readability.

@@ -285,3 +285,5 @@ button {
 .muted { color: var(--color-text-muted); }
 .error-text { color: var(--color-danger); }
 .over-budget { color: var(--color-danger); font-weight: var(--font-weight-bold); }
+// Counterpart to .over-budget: quota still left to spend.
+.under-budget { color: var(--color-success); font-weight: var(--font-weight-bold); }

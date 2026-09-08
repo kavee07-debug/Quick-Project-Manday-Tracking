@@ -42,6 +42,9 @@ interface Props {
   renderDetail?: (ctx: ExplainCtx) => ReactNode;
 }
 
+/** Remaining reads green while quota is left and red once it is overspent; exactly 0 stays plain. */
+const remCls = (n: number) => (n > 0 ? ' under-budget' : n < 0 ? ' over-budget' : '');
+
 export function PivotSummaryTable({ firstColHeader, rows, isAdmin, renderDetail }: Props) {
   const [adminView, setAdminView] = useState(false);
   const showPm = isAdmin && adminView;
@@ -165,7 +168,7 @@ export function PivotSummaryTable({ firstColHeader, rows, isAdmin, renderDetail 
                     <Fragment key={p}>
                       <td className={`num${exCls}${openCls(null, p)}`} {...ex(null, p)}>{fmt(t.budgetAdjust)}</td>
                       <td className={`num${exCls}${openCls(null, p)}`} {...ex(null, p)}>{fmt(t.actual)}</td>
-                      <td className={`num${exCls}${openCls(null, p)} ${t.remaining < 0 ? 'over-budget' : ''}`} {...ex(null, p)}>{fmt(t.remaining)}</td>
+                      <td className={`num${exCls}${openCls(null, p)}${remCls(t.remaining)}`} {...ex(null, p)}>{fmt(t.remaining)}</td>
                     </Fragment>
                   );
                 })}
@@ -182,7 +185,7 @@ export function PivotSummaryTable({ firstColHeader, rows, isAdmin, renderDetail 
                     <>
                       <td className={`num pivot__totalcol${exCls}${openCls(null, null)}`} {...ex(null, null)}>{fmt(g.ba)}</td>
                       <td className={`num pivot__totalcol${exCls}${openCls(null, null)}`} {...ex(null, null)}>{fmt(g.ac)}</td>
-                      <td className={`num pivot__totalcol${exCls}${openCls(null, null)} ${g.rem < 0 ? 'over-budget' : ''}`} {...ex(null, null)}>{fmt(g.rem)}</td>
+                      <td className={`num pivot__totalcol${exCls}${openCls(null, null)}${remCls(g.rem)}`} {...ex(null, null)}>{fmt(g.rem)}</td>
                     </>
                   );
                 })()}
@@ -211,7 +214,7 @@ export function PivotSummaryTable({ firstColHeader, rows, isAdmin, renderDetail 
                         <Fragment key={p}>
                           <td className={`num${exCls}${openCls(k, p)}`} {...ex(k, p)}>{fmt(c.budgetAdjust)}</td>
                           <td className={`num${exCls}${openCls(k, p)}`} {...ex(k, p)}>{fmt(c.actual)}</td>
-                          <td className={`num${exCls}${openCls(k, p)} ${c.remaining < 0 ? 'over-budget' : ''}`} {...ex(k, p)}>{fmt(c.remaining)}</td>
+                          <td className={`num${exCls}${openCls(k, p)}${remCls(c.remaining)}`} {...ex(k, p)}>{fmt(c.remaining)}</td>
                         </Fragment>
                       );
                     })}
@@ -231,7 +234,7 @@ export function PivotSummaryTable({ firstColHeader, rows, isAdmin, renderDetail 
                         <>
                           <td className={`num pivot__totalcol${exCls}${openCls(k, null)}`} {...ex(k, null)}>{fmt(rt.ba)}</td>
                           <td className={`num pivot__totalcol${exCls}${openCls(k, null)}`} {...ex(k, null)}>{fmt(rt.ac)}</td>
-                          <td className={`num pivot__totalcol${exCls}${openCls(k, null)} ${rt.rem < 0 ? 'over-budget' : ''}`} {...ex(k, null)}>{fmt(rt.rem)}</td>
+                          <td className={`num pivot__totalcol${exCls}${openCls(k, null)}${remCls(rt.rem)}`} {...ex(k, null)}>{fmt(rt.rem)}</td>
                         </>
                       );
                     })()}
