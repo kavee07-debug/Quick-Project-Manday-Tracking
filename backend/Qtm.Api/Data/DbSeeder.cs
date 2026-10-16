@@ -21,7 +21,12 @@ public static class DbSeeder
         _ => role,
     };
 
-    public static async Task SeedAdminAsync(IServiceProvider sp, IConfiguration config)
+    // Published in the repository (appsettings.json / the Production template), so never usable
+    // as a real admin password.
+    private static readonly string[] KnownPlaceholderPasswords = ["Admin@123", "CHANGE_ME_strong_admin_password"];
+
+    public static async Task SeedAdminAsync(IServiceProvider sp, IConfiguration config, bool isProduction = false,
+        ILogger? log = null)
     {
         using var scope = sp.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<QtmDbContext>();
@@ -39,6 +44,14 @@ public static class DbSeeder
 
         if (await db.Users.AnyAsync(u => u.Email == email))
             return;
+
+        // A fresh Production database must not get an admin whose password is in the repository.
+        if (isProduction && KnownPlaceholderPasswords.Contains(password))
+        {
+            log?.LogWarning("Admin user not created: Seed:AdminPassword is still a repository placeholder. " +
+                "Set a real one (App Service: Seed__AdminPassword) and restart.");
+            return;
+        }
 
         var adminRole = await db.Roles.FirstOrDefaultAsync(r => r.Name == Roles.Admin);
         if (adminRole is null)

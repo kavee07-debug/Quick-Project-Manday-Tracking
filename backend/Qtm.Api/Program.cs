@@ -21,27 +21,22 @@ builder.Services.AddSingleton(jwtSettings);
 // NOT travel with the build artifact — on a host that supplies configuration through environment
 // variables instead (Azure App Service), forgetting to set them would silently publish an app
 // signing tokens with a public key and an admin account whose password is in this repository.
-// Refuse to start instead.
+// Refuse to start on a public signing key. The seeded admin password is handled by DbSeeder
+// instead (it only matters when the admin does not exist yet, so an existing install that never
+// overrode it must keep starting) — in Production it simply won't create an admin with it.
 if (builder.Environment.IsProduction())
 {
-    // Both the appsettings.json dev values and the appsettings.Production.json template
-    // placeholders — every one of these strings is published in the repository.
+    // Both the appsettings.json dev value and the appsettings.Production.json template
+    // placeholder — every one of these strings is published in the repository.
     string[] knownJwtKeys = [
         "CHANGE_THIS_DEV_ONLY_super_secret_signing_key_at_least_32_chars_long",
         "CHANGE_THIS_TO_A_STRONG_RANDOM_SECRET_AT_LEAST_32_CHARS_LONG",
     ];
-    string[] knownAdminPasswords = ["Admin@123", "CHANGE_ME_strong_admin_password"];
 
     if (string.IsNullOrWhiteSpace(jwtSettings.Key) || knownJwtKeys.Contains(jwtSettings.Key))
         throw new InvalidOperationException(
             "Jwt:Key is still a placeholder from the repository. Set a real secret " +
             "(App Service: Jwt__Key) before starting in Production.");
-
-    var adminPassword = builder.Configuration["Seed:AdminPassword"];
-    if (adminPassword is null || knownAdminPasswords.Contains(adminPassword))
-        throw new InvalidOperationException(
-            "Seed:AdminPassword is still a placeholder from the repository. Set a real password " +
-            "(App Service: Seed__AdminPassword) before starting in Production.");
 }
 
 const string CorsPolicy = "frontend";
@@ -149,7 +144,7 @@ app.MapFallbackToFile("index.html");
 // (which reads/writes dbsettings.json, not the DB) needs to stay reachable to fix it.
 try
 {
-    await DbSeeder.SeedAdminAsync(app.Services, app.Configuration);
+    await DbSeeder.SeedAdminAsync(app.Services, app.Configuration, app.Environment.IsProduction(), app.Logger);
 }
 catch (Exception ex)
 {
