@@ -157,8 +157,11 @@ export interface Resource {
   name: string;
   position?: string | null;
   isActive: boolean;
+  /** Counts toward the Billing KPI — a column of the Billing Manday Allocate matrix. */
+  isBillingKpi: boolean;
 }
 
+// isBillingKpi has its own endpoint (PUT /resources/{id}/billing-kpi), so the edit form can't clear it.
 export type ResourceUpsert = Pick<Resource, 'code' | 'name' | 'position' | 'isActive'>;
 
 // ---- Master Item (synced from D365BC) ----
@@ -192,6 +195,8 @@ export interface DbConfig {
   hasPassword: boolean;
   trustServerCertificate: boolean;
   encrypt: boolean;
+  /** True when the host owns the connection (Azure App Service config) — the page is view-only. */
+  isReadOnly: boolean;
 }
 
 export interface DbConfigUpsert {
@@ -485,6 +490,105 @@ export interface RevenueMonthEstimate {
   cappedStd: boolean; cappedAct: boolean;
   sources: RevenueMonthEstimateSource[];
 }
+/** One kept version of a period. Immutable once written. */
+export interface RevenueMonthArchive {
+  versionNo: number;
+  archivedAt: string;
+  archivedBy?: string | null;
+  reason?: string | null;
+  isAuto: boolean;                                      // taken automatically on Confirm
+  jobCount: number;
+  totalStd?: number | null;
+  totalAct?: number | null;
+  targetAmount?: number | null;
+  wasConfirmed: boolean;
+}
+/** A kept version plus the period exactly as it read when it was kept. */
+export interface RevenueMonthArchiveDetail {
+  version: RevenueMonthArchive;
+  data: RevenueMonthDetail;
+}
+
+/** One imported BC Posted Sales Invoice line (Billing Manday Allocate). */
+export interface BillingLine {
+  id: number;
+  documentNo: string;
+  lineSeq: number;
+  postingDate?: string | null;                          // yyyy-MM-dd
+  customerNo?: string | null;
+  customerName?: string | null;
+  customerSearchName?: string | null;
+  lineType: string;                                     // Item | Resource
+  itemNo?: string | null;
+  itemCategoryCode?: string | null;
+  description?: string | null;
+  quantity?: number | null;
+  unitOfMeasure?: string | null;
+  unitPrice?: number | null;
+  lineAmount?: number | null;
+  projectNo?: string | null;
+  projectTaskNo?: string | null;
+  jobName?: string | null;                              // from Project master / D365 job staging
+  projectManager?: string | null;                       // BC qerpProjectManager (D365 job staging)
+  isConfirmed: boolean;
+  confirmedAt?: string | null;
+  confirmedBy?: string | null;
+  /** ResourceId -> Quantity for the allocation matrix; only on the Allocate screen. */
+  allocations?: Record<string, number> | null;
+  /** Allocation finished and locked — cells read-only, can't be un-confirmed until unlocked. */
+  isAllocLocked: boolean;
+  allocLockedAt?: string | null;
+  allocLockedBy?: string | null;
+  /** Baht per manday for the posting year; null = that year has no rate yet. */
+  mandayRate?: number | null;
+  /** ROUND(lineAmount / mandayRate, 3) — what the allocation has to add up to. */
+  billingManday?: number | null;
+  /** Manday allocated outside the resource master (another department…), and who it is for. */
+  otherQuantity?: number | null;
+  otherNote?: string | null;
+}
+export interface BillingOtherResult { quantity?: number | null; note?: string | null; }
+export interface BillingBulkAllocateResult { updated: number; skipped: number; }
+export interface BillingLockResult { updated: number; skipped: number; }
+/** One year's billing manday rate (baht per manday). */
+export interface BillingRate {
+  year: number; rate: number; updatedAt: string; updatedBy?: string | null;
+  lines: number; lockedLines: number;
+}
+export interface BillingRateSaveResult { rate: BillingRate; rescaledLines: number; }
+/** A Billing-KPI resource = one column of the allocation matrix (ordered SA, Dev, PM). */
+export interface BillingResource { resourceId: number; code: string; name: string; position?: string | null; }
+export interface BillingAllocationResult { lineId: number; resourceId: number; quantity?: number | null; }
+/** Billing KPI Manday — allocated manday per resource per posting year (keys are years). */
+export interface BillingKpiRow {
+  resourceId: number; code: string; name: string; position?: string | null;
+  isBillingKpi: boolean;                                // false = un-ticked but still has allocations
+  byYear: Record<string, number>;
+  total: number;
+}
+export interface BillingKpi {
+  years: number[];
+  rows: BillingKpiRow[];
+  allocatedByYear: Record<string, number>;
+  mandayByYear: Record<string, number>;                 // confirmed lines' Billing Manday, for cross-check
+  missingRateYears: number[];                           // confirmed lines but no rate set up
+  otherByYear: Record<string, number>;                  // outside the resource master; inside allocatedByYear
+  rateByYear: Record<string, number>;                   // standard manday rate, shown under each year header
+  amountByYear: Record<string, number>;                 // Total Amount: confirmed lines' Line Amount
+}
+export interface BillingYear { year: number; lines: number; }
+export interface BillingImportResult {
+  imported: number;
+  documents: number;
+  /** Already in the system (pending, confirmed or deleted) — posted invoices are never re-imported. */
+  skippedExistingDocuments: number;
+  skippedBlankType: number;
+}
+export interface BillingDeleteResult { deleted: number; skippedConfirmed: number; }
+export interface BillingConfirmResult { updated: number; }
+/** The local copy of BC job names / PMs used to label invoice lines. */
+export interface BillingJobCache { jobs: number; fetchedAt?: string | null; }
+export interface BillingJobSyncResult { jobs: number; withName: number; withPm: number; fetchedAt: string; }
 
 export interface TaskSummary {
   taskId: number;

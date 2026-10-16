@@ -3,7 +3,10 @@
    Idempotent — safe to run on an existing QtmManday DB.
    schema.sql (full rebuild) already includes this table.
    ============================================================ */
-USE QtmManday;
+:on error exit
+/* Azure SQL ไม่รองรับ USE — ต้องระบุฐานข้อมูลตอนเรียก (sqlcmd -d QtmManday) */
+IF DB_NAME() IN (N'master', N'tempdb', N'model', N'msdb')
+    THROW 50000, N'รันผิดฐานข้อมูล — ใส่ -d QtmManday ตอนเรียก sqlcmd', 1;
 GO
 
 IF OBJECT_ID(N'dbo.MasterItem', N'U') IS NULL

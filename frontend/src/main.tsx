@@ -9,6 +9,7 @@ import './styles/global.scss';
 import App from './App.tsx';
 import { AuthProvider } from './auth/AuthContext';
 import { ensureMsalInit, msalInstance } from './auth/msal';
+import { API_BASE } from './api/client';
 
 const TOKEN_KEY = 'qtm.token';
 const SESSION_KEY = 'qtm.session';
@@ -20,7 +21,7 @@ async function completeMsRedirect() {
   await ensureMsalInit();
   const resp = await msalInstance.handleRedirectPromise();
   if (!resp?.idToken) return;
-  const r = await fetch('/api/v1/auth/ms-login', {
+  const r = await fetch(`${API_BASE}/auth/ms-login`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${resp.idToken}` },
   });

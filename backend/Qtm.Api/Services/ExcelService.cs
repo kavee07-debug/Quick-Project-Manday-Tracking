@@ -24,6 +24,20 @@ public record RevenueMonthlyExportRow(string JobNo, string? JobName, string? Cus
     decimal PrevStd, decimal CurrStd, decimal DeltaStd, decimal AmountStd,
     decimal PrevAct, decimal CurrAct, decimal DeltaAct, decimal AmountAct, string Status);
 
+// ---- BC "Posted Sales Invoice Lines" export (Billing Manday Allocate import source) ----
+public record PostedSalesInvoiceRow(string DocumentNo, int LineSeq, DateOnly? PostingDate,
+    string? CustomerNo, string? CustomerName, string? CustomerSearchName,
+    string LineType, string? ItemNo, string? ItemCategoryCode, string? Description,
+    decimal? Quantity, string? UnitOfMeasure, decimal? UnitPrice, decimal? LineDiscountPct,
+    decimal? LineAmount, decimal? AmountInclVat, string? BoiCode,
+    string? ProjectNo, string? ProjectTaskNo, int? ContractEntryNo, int? JobPlanningLineNo,
+    string? JobPlanningDescription, int ExcelRow);
+public record PostedSalesInvoiceFile(List<PostedSalesInvoiceRow> Rows, int SkippedBlankType);
+
+// A column of a generic export table — how its cells are formatted, and whether it gets a total.
+public enum ExcelColumnKind { Text, Date, Quantity, Money, Manday }
+public record ExcelColumn(string Header, ExcelColumnKind Kind, bool Sum = false);
+
 /// <summary>Builds and parses .xlsx workbooks for Project / Task / Manday data.</summary>
 public class ExcelService
 {
@@ -280,6 +294,222 @@ public class ExcelService
             ws.Cell(r, 12).Value = row.AmountAct;
             ws.Cell(r, 13).Value = row.Status;
         });
+    }
+
+    // ---------- Billing: BC Posted Sales Invoice Lines ----------
+
+    /// <summary>
+    /// Parses the BC "Posted Sales Invoice Lines" export. Columns are mapped by header text, so the
+    /// extra columns people add to the sheet by hand (PM, per-resource splits, …) are simply ignored.
+    /// Lines whose Type is blank are BC text/comment lines and are skipped — note BC writes those as
+    /// a single space, so the check trims first. Each kept line is numbered within its document in
+    /// file order (LineSeq), since the export has no per-line key of its own.
+    /// </summary>
+    public PostedSalesInvoiceFile ReadPostedSalesInvoiceLines(Stream stream)
+    {
+        using var wb = new XLWorkbook(stream);
+        // The export is one sheet, but a hand-worked copy may carry pivots in front of it — take the
+        // first sheet whose header row has both "Document No." and "Type".
+        IXLWorksheet? ws = null;
+        Dictionary<string, int> byHeader = new();
+        foreach (var sheet in wb.Worksheets)
+        {
+            var used = sheet.RangeUsed();
+            if (used is null) continue;
+            var hdrRow = used.FirstRow().RowNumber();
+            var map = new Dictionary<string, int>();
+            for (var c = 1; c <= used.LastColumn().ColumnNumber(); c++)
+            {
+                var h = NormalizeHeader(sheet.Cell(hdrRow, c).GetString());
+                if (h.Length > 0) map.TryAdd(h, c);
+            }
+            if (map.ContainsKey("document no.") && map.ContainsKey("type")) { ws = sheet; byHeader = map; break; }
+        }
+        if (ws is null)
+            throw new InvalidOperationException(
+                "ไม่พบหัวตาราง \"Document No.\" และ \"Type\" — กรุณาใช้ไฟล์ Posted Sales Invoice Lines ที่ export จาก BC");
+
+        int Col(params string[] names)
+        {
+            foreach (var n in names)
+                if (byHeader.TryGetValue(n, out var c)) return c;
+            return 0;
+        }
+
+        var cDoc = Col("document no.");
+        var cDate = Col("posting date");
+        var cCustNo = Col("sell-to customer no.");
+        var cCustName = Col("sell-to customer name");
+        var cCustSearch = Col("sell-to customer search name");
+        var cType = Col("type");
+        var cNo = Col("no.");
+        var cCat = Col("item category code");
+        var cDesc = Col("description");
+        var cQty = Col("quantity");
+        var cUom = Col("unit of measure code");
+        var cPrice = Col("unit price excl. vat");
+        var cDisc = Col("line discount %");
+        var cAmt = Col("line amount excl. vat");
+        var cAmtVat = Col("amount including vat");
+        var cBoi = Col("boi code");
+        var cProject = Col("project no.", "job no.", "job");
+        var cTask = Col("project task no.", "job task no.");
+        var cContract = Col("project contract entry no.", "job contract entry no.");
+        var cJpl = Col("job planning line no.");
+        var cJplDesc = Col("job planning description");
+
+        var missing = new List<string>();
+        if (cQty == 0) missing.Add("Quantity");
+        if (cUom == 0) missing.Add("Unit of Measure Code");
+        if (cProject == 0) missing.Add("Project No.");
+        if (missing.Count > 0)
+            throw new InvalidOperationException($"ไฟล์ขาดคอลัมน์ที่จำเป็น: {string.Join(", ", missing)}");
+
+        var used2 = ws.RangeUsed()!;
+        var firstData = used2.FirstRow().RowNumber() + 1;
+        var lastRow = used2.LastRow().RowNumber();
+        var seqByDoc = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var rows = new List<PostedSalesInvoiceRow>();
+        var skipped = 0;
+
+        for (var r = firstData; r <= lastRow; r++)
+        {
+            var doc = ws.Cell(r, cDoc).GetString().Trim();
+            if (doc.Length == 0) continue;                          // padding rows past the data
+            var type = ws.Cell(r, cType).GetString().Trim();
+            if (type.Length == 0) { skipped++; continue; }          // BC text line (Type = " ")
+
+            string? Str(int c, int max) => c == 0 ? null : Truncate(NullIfEmpty(ws.Cell(r, c).GetString().Trim()), max);
+            decimal? Num(int c) => c == 0 ? null : CellDecimal(ws.Cell(r, c));
+            int? Int(int c) => Num(c) is decimal d && d != 0 ? (int)d : null;
+
+            var seq = seqByDoc.TryGetValue(doc, out var s) ? s + 1 : 1;
+            seqByDoc[doc] = seq;
+
+            rows.Add(new PostedSalesInvoiceRow(
+                DocumentNo: Truncate(doc, 30)!,
+                LineSeq: seq,
+                PostingDate: cDate == 0 ? null : CellDate(ws.Cell(r, cDate)),
+                CustomerNo: Str(cCustNo, 30),
+                CustomerName: Str(cCustName, 300),
+                CustomerSearchName: Str(cCustSearch, 150),
+                LineType: Truncate(type, 20)!,
+                ItemNo: Str(cNo, 50),
+                ItemCategoryCode: Str(cCat, 50),
+                Description: Str(cDesc, 250),
+                Quantity: Num(cQty),
+                UnitOfMeasure: Str(cUom, 20),
+                UnitPrice: Num(cPrice),
+                LineDiscountPct: Num(cDisc),
+                LineAmount: Num(cAmt),
+                AmountInclVat: Num(cAmtVat),
+                BoiCode: Str(cBoi, 20),
+                ProjectNo: Str(cProject, 50),
+                ProjectTaskNo: Str(cTask, 50),
+                ContractEntryNo: Int(cContract),
+                JobPlanningLineNo: Int(cJpl),
+                JobPlanningDescription: Str(cJplDesc, 250),
+                ExcelRow: r));
+        }
+        return new PostedSalesInvoiceFile(rows, skipped);
+    }
+
+    // A date cell from a foreign workbook: a real date value when typed, else invariant parsing.
+    private static DateOnly? CellDate(IXLCell cell)
+    {
+        if (cell.IsEmpty()) return null;
+        if (cell.DataType == XLDataType.DateTime) return DateOnly.FromDateTime(cell.GetDateTime());
+        if (cell.DataType == XLDataType.Number) return DateOnly.FromDateTime(DateTime.FromOADate(cell.GetDouble()));
+        return ParseDate(cell.GetString().Trim());
+    }
+
+    // ---------- Generic table export ----------
+
+    /// <summary>
+    /// Writes a table whose columns are only known at run time (e.g. the Billing allocation matrix,
+    /// one column per KPI resource). Each row is one value per column — string, decimal, DateOnly or
+    /// null. Columns marked Sum get a bold totals row; an optional note goes above the header.
+    /// </summary>
+    public byte[] WriteTable(string sheetName, IReadOnlyList<ExcelColumn> columns,
+        IEnumerable<object?[]> rows, string? note = null)
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add(sheetName);
+
+        var headerRow = 1;
+        if (!string.IsNullOrWhiteSpace(note))
+        {
+            ws.Cell(1, 1).Value = note;
+            ws.Cell(1, 1).Style.Font.Italic = true;
+            headerRow = 3;
+        }
+        for (var c = 0; c < columns.Count; c++)
+        {
+            var cell = ws.Cell(headerRow, c + 1);
+            cell.Value = columns[c].Header;
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#EAF1FE");
+        }
+
+        static string? FormatOf(ExcelColumnKind k) => k switch
+        {
+            ExcelColumnKind.Money => "#,##0.00",
+            ExcelColumnKind.Manday => "#,##0.000",
+            ExcelColumnKind.Quantity => "#,##0.####",
+            ExcelColumnKind.Date => "dd/mm/yyyy",
+            _ => null,
+        };
+
+        var r = headerRow + 1;
+        var sums = new decimal[columns.Count];
+        foreach (var row in rows)
+        {
+            for (var c = 0; c < columns.Count; c++)
+            {
+                var v = c < row.Length ? row[c] : null;
+                var cell = ws.Cell(r, c + 1);
+                switch (v)
+                {
+                    case null: break;
+                    case decimal d:
+                        cell.Value = d;
+                        if (columns[c].Sum) sums[c] += d;
+                        break;
+                    case DateOnly date: cell.Value = date.ToDateTime(TimeOnly.MinValue); break;
+                    default: cell.Value = v.ToString(); break;
+                }
+                if (FormatOf(columns[c].Kind) is string fmt)
+                {
+                    if (columns[c].Kind == ExcelColumnKind.Date) cell.Style.DateFormat.Format = fmt;
+                    else cell.Style.NumberFormat.Format = fmt;
+                }
+            }
+            r++;
+        }
+
+        if (columns.Any(c => c.Sum))
+        {
+            ws.Cell(r, 1).Value = "รวม";
+            for (var c = 0; c < columns.Count; c++)
+            {
+                if (!columns[c].Sum) continue;
+                var cell = ws.Cell(r, c + 1);
+                cell.Value = sums[c];
+                if (FormatOf(columns[c].Kind) is string fmt) cell.Style.NumberFormat.Format = fmt;
+            }
+            var totals = ws.Range(r, 1, r, columns.Count);
+            totals.Style.Font.Bold = true;
+            totals.Style.Border.TopBorder = XLBorderStyleValues.Thin;
+        }
+
+        ws.Columns().AdjustToContents(headerRow, r);
+        foreach (var col in ws.ColumnsUsed())
+            if (col.Width > 60) col.Width = 60;           // keep long descriptions from blowing up the sheet
+        ws.SheetView.FreezeRows(headerRow);
+
+        using var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        return ms.ToArray();
     }
 
     // ---------- Helpers ----------

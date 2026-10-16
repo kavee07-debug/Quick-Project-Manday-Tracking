@@ -4,6 +4,23 @@ import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import './LoginPage.scss';
 
+/**
+ * The Microsoft four-square mark. Inline rather than an <img> so it inherits the button's size
+ * and needs no network request; the hex values are Microsoft's brand colours, which are fixed
+ * by their branding guidelines and so deliberately not design tokens.
+ * Decorative — the button already says "Microsoft".
+ */
+function MicrosoftLogo() {
+  return (
+    <svg className="login__ms-logo" viewBox="0 0 23 23" aria-hidden="true" focusable="false">
+      <rect x="1"  y="1"  width="10" height="10" fill="#F25022" />
+      <rect x="12" y="1"  width="10" height="10" fill="#7FBA00" />
+      <rect x="1"  y="12" width="10" height="10" fill="#00A4EF" />
+      <rect x="12" y="12" width="10" height="10" fill="#FFB900" />
+    </svg>
+  );
+}
+
 export default function LoginPage() {
   const { login, loginWithMicrosoft, session } = useAuth();
   const navigate = useNavigate();
@@ -63,7 +80,8 @@ export default function LoginPage() {
         <p className="muted login__subtitle">Quick Project Manday Tracking</p>
 
         <button type="button" className="btn login__ms" onClick={onMicrosoft} disabled={busy}>
-          เข้าสู่ระบบด้วย Microsoft
+          <MicrosoftLogo />
+          <span>เข้าสู่ระบบด้วย Microsoft</span>
         </button>
         <div className="login__divider"><span>หรือเข้าด้วยรหัสผ่าน (ผู้ดูแล)</span></div>
 

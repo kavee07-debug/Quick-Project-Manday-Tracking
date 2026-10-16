@@ -16,6 +16,34 @@ var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>()
     ?? throw new InvalidOperationException("Missing Jwt configuration.");
 builder.Services.AddSingleton(jwtSettings);
 
+// The repo ships development defaults for the signing key and the seeded admin password so that
+// `dotnet run` works out of the box. appsettings.Production.json is gitignored and therefore does
+// NOT travel with the build artifact — on a host that supplies configuration through environment
+// variables instead (Azure App Service), forgetting to set them would silently publish an app
+// signing tokens with a public key and an admin account whose password is in this repository.
+// Refuse to start instead.
+if (builder.Environment.IsProduction())
+{
+    // Both the appsettings.json dev values and the appsettings.Production.json template
+    // placeholders — every one of these strings is published in the repository.
+    string[] knownJwtKeys = [
+        "CHANGE_THIS_DEV_ONLY_super_secret_signing_key_at_least_32_chars_long",
+        "CHANGE_THIS_TO_A_STRONG_RANDOM_SECRET_AT_LEAST_32_CHARS_LONG",
+    ];
+    string[] knownAdminPasswords = ["Admin@123", "CHANGE_ME_strong_admin_password"];
+
+    if (string.IsNullOrWhiteSpace(jwtSettings.Key) || knownJwtKeys.Contains(jwtSettings.Key))
+        throw new InvalidOperationException(
+            "Jwt:Key is still a placeholder from the repository. Set a real secret " +
+            "(App Service: Jwt__Key) before starting in Production.");
+
+    var adminPassword = builder.Configuration["Seed:AdminPassword"];
+    if (adminPassword is null || knownAdminPasswords.Contains(adminPassword))
+        throw new InvalidOperationException(
+            "Seed:AdminPassword is still a placeholder from the repository. Set a real password " +
+            "(App Service: Seed__AdminPassword) before starting in Production.");
+}
+
 const string CorsPolicy = "frontend";
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? ["http://localhost:3007"];
@@ -37,7 +65,9 @@ builder.Services.AddSingleton<ExcelService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
 // D365 Business Central integration (Admin-only API screens).
-builder.Services.AddHttpClient<D365BcClient>();
+// Explicit timeout: the sync endpoints page through D365 in a loop inside a single request, and
+// App Service cuts an idle request at 230s. Failing a slow page fast beats losing the whole call.
+builder.Services.AddHttpClient<D365BcClient>(c => c.Timeout = TimeSpan.FromSeconds(60));
 builder.Services.AddScoped<D365JobService>();
 builder.Services.AddScoped<D365TimesheetService>();
 
@@ -90,8 +120,14 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-app.UseSwagger();
-app.UseSwaggerUI();
+// Off in Production by default: on-prem the API is LAN-only, but on Azure it is reachable from
+// the internet and there is no reason to publish the full endpoint surface there. Set
+// "Swagger:Enabled" to override either way (e.g. to bring it back on a LAN-only prod host).
+if (app.Configuration.GetValue("Swagger:Enabled", !app.Environment.IsProduction()))
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 // Serve the built React app (wwwroot) from the same origin as the API, so no
 // reverse-proxy/CORS is needed: /api/* hits the controllers, everything else

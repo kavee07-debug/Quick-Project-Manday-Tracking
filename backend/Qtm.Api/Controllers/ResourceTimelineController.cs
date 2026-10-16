@@ -25,6 +25,19 @@ public class ResourceTimelineController(QtmDbContext db) : ControllerBase
             ? []
             : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
 
+    // "Today" is the users' today, not the host's. On-prem the server runs in Asia/Bangkok, but a
+    // cloud host (Azure App Service Linux) runs in UTC — which would roll the date over 7 hours
+    // early every evening. Ask for the zone by both its IANA and Windows id so this works on either.
+    private static DateTime BangkokNow()
+    {
+        foreach (var id in new[] { "Asia/Bangkok", "SE Asia Standard Time" })
+        {
+            try { return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(id)); }
+            catch (TimeZoneNotFoundException) { /* try the other naming scheme */ }
+        }
+        return DateTime.UtcNow.AddHours(7);
+    }
+
     /// <param name="types">Optional CSV of project types to include; empty = all.</param>
     /// <param name="jobs">Optional CSV of project codes to include; empty = all.</param>
     /// <param name="start">Reference "today" (yyyy-MM-dd) from the client; defaults to the server's local date.</param>
@@ -34,7 +47,7 @@ public class ResourceTimelineController(QtmDbContext db) : ControllerBase
     {
         var typeSet = ParseCsv(types);
         var jobSet = ParseCsv(jobs);
-        var today = start ?? DateOnly.FromDateTime(DateTime.Now);
+        var today = start ?? DateOnly.FromDateTime(BangkokNow());
 
         var query =
             from m in db.MandayEntries

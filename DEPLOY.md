@@ -1,4 +1,17 @@
-# Deploy Guide — Quick Project Manday Tracking (On-Prem Windows + IIS)
+# Deploy Guide — Quick Project Manday Tracking
+
+มี 2 เส้นทาง deploy ที่รองรับพร้อมกัน จากโค้ดชุดเดียวกัน:
+
+| เส้นทาง | หน้าตา | ใช้เมื่อ |
+|---|---|---|
+| **On-Prem Windows + IIS** (ด้านล่าง) | single-origin — backend เสิร์ฟทั้ง SPA และ API | ระบบที่ใช้อยู่ปัจจุบัน |
+| **[Azure](#deploy-ขึ้น-azure-static-web-apps--app-service--azure-sql)** | SPA อยู่ Static Web Apps, API อยู่ App Service, คนละ origin + CORS | เส้นทางใหม่ |
+
+ทุกค่าที่เพิ่มเข้ามาเพื่อ Azure เป็น **opt-in** — ถ้าไม่ตั้ง พฤติกรรมจะเหมือน on-prem เดิมทุกอย่าง
+
+---
+
+## On-Prem Windows + IIS
 
 **สถาปัตยกรรม: เว็บเดียว (single-origin)** — backend .NET เสิร์ฟทั้ง React SPA (`wwwroot`) และ API บนพอร์ตเดียว **ไม่ใช้ URL Rewrite / ARR / reverse-proxy / CORS**
 
@@ -29,8 +42,12 @@ Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebServerRole, IIS-WebSer
 
 ## ขั้นที่ 2 — เตรียม DB server (ครั้งเดียว)
 ```powershell
-sqlcmd -S <DBSERVER> -E -C -i db\schema.sql   # สร้าง QtmManday + ตาราง + view + seed
+sqlcmd -S <DBSERVER> -E -C -Q "IF DB_ID(N'QtmManday') IS NULL CREATE DATABASE QtmManday;"
+sqlcmd -S <DBSERVER> -E -C -d QtmManday -i db\schema.sql   # ตาราง + view + seed
 ```
+> สคริปต์ทุกไฟล์ใน `db\` **ไม่มี `USE` แล้ว** (Azure SQL ไม่รองรับ) จึง**ต้องใส่ `-d QtmManday` ทุกครั้ง** —
+> ถ้าลืม สคริปต์จะหยุดพร้อม error แทนที่จะไปสร้างตารางใน `master`
+> ⚠️ `schema.sql` **ลบตารางทั้งหมดแล้วใส่ข้อมูลตัวอย่าง** — ใช้เฉพาะตอนติดตั้งใหม่ ห้ามรันทับ DB ที่มีข้อมูลจริง
 ```sql
 USE QtmManday;
 CREATE LOGIN qtmapp WITH PASSWORD = '<STRONG_PASSWORD>';
@@ -136,3 +153,123 @@ sqlcmd -S <DBSERVER> -U <user> -P <pwd> -C -d QtmManday -i db\migration-2026-07-
 **อื่นๆ:** 502.3/500.30 = backend start ไม่ขึ้น (เช็ก connection string / DB ต่อได้ไหม) · App Pool ต้องเป็น **No Managed Code**
 
 > หมายเหตุ: `setup-iis.ps1` ในโปรเจกต์เขียนไว้สำหรับแนวทางเก่า (2 site + reverse-proxy) ซึ่ง**เลิกใช้แล้ว** — ใช้ขั้นตอน manual ด้านบนแทน
+
+---
+
+# Deploy ขึ้น Azure (Static Web Apps + App Service + Azure SQL)
+
+```
+Browser ──► https://<web>.azurestaticapps.net     Static Web Apps (Free) — SPA เท่านั้น
+              │  fetch ข้าม origin + CORS
+              ▼
+            https://<api>.azurewebsites.net       App Service (Linux B1) — API
+              │  TCP 1433 / Encrypt=True
+              ▼
+            <sql>.database.windows.net            Azure SQL — DB: QtmManday
+```
+
+> **ทำไมถึงแยก 2 origin:** SWA **Free ไม่รองรับ linked backend** (เชื่อม App Service มาเป็น `/api/*`) — เป็นฟีเจอร์ของ Standard เท่านั้น
+
+## 1. สร้าง resource (region: Southeast Asia)
+
+| Resource | ค่า |
+|---|---|
+| Resource group | `rg-qtm-prod` |
+| SQL logical server | ตั้ง Entra admin + SQL admin login |
+| Database | `QtmManday` — **Basic** · **collation ต้องตรงกับ on-prem** (เช็ค: `SELECT DATABASEPROPERTYEX('QtmManday','Collation')`) |
+| App Service Plan | Linux **B1** |
+| Web App (API) | .NET 10 · **Always On = เปิด** |
+| Static Web App | **Free** · ผูก GitHub repo |
+
+SQL firewall: เปิด **Allow Azure services** + เพิ่ม IP ออฟฟิศไว้รัน sqlcmd
+
+## 2. ย้ายข้อมูลขึ้น Azure SQL
+
+1. SSMS → คลิกขวา `QtmManday` → **Tasks → Export Data-tier Application** → ได้ `.bacpac`
+2. Azure Portal → SQL server → **Import database** → เลือก bacpac → tier Basic
+3. เทียบจำนวนแถวสองฝั่งให้ตรงกัน:
+   ```sql
+   SELECT t.name, SUM(p.rows) AS Rows FROM sys.tables t
+   JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0,1)
+   GROUP BY t.name ORDER BY t.name;
+   ```
+4. สร้าง user ของแอป — Azure SQL ใช้ `CREATE LOGIN` ไม่ได้ ต้องเป็น **contained user**:
+   ```sql
+   CREATE USER qtmapp WITH PASSWORD = '<pwd>';
+   ALTER ROLE db_datareader ADD MEMBER qtmapp;
+   ALTER ROLE db_datawriter ADD MEMBER qtmapp;
+   ALTER ROLE db_ddladmin  ADD MEMBER qtmapp;   -- ถ้าจะรัน migration ด้วย user นี้
+   ```
+
+migration รอบถัดๆ ไปรันเหมือนเดิม แค่เปลี่ยน server:
+```powershell
+sqlcmd -S <sql>.database.windows.net -d QtmManday -U qtmapp -P <pwd> -C -i db\migrate-YYYY-MM-DD-HHmm.sql
+```
+
+## 3. Application settings ของ Web App
+
+แทน `appsettings.Production.json` ทั้งไฟล์ (ไฟล์นั้นไม่ต้อง deploy ขึ้น Azure เลย):
+
+```
+ConnectionStrings__Qtm     = Server=tcp:<sql>.database.windows.net,1433;Initial Catalog=QtmManday;
+                             User ID=qtmapp;Password=<pwd>;Encrypt=True;TrustServerCertificate=False;
+                             MultipleActiveResultSets=True;Connect Timeout=30
+Db__AllowRuntimeOverride   = false
+Db__ConnectTimeoutSeconds  = 30
+Jwt__Key                   = <สุ่ม ≥32 ตัวอักษร>
+Seed__AdminPassword        = <รหัสผ่านที่แข็งแรง>
+Cors__AllowedOrigins__0    = https://<web>.azurestaticapps.net
+ASPNETCORE_ENVIRONMENT     = Production
+```
+
+- `Db__AllowRuntimeOverride=false` ทำให้หน้า **Config** เป็นแบบดูอย่างเดียว (ยังกด "ทดสอบการเชื่อมต่อ" ได้) เพราะบน App Service
+  การเขียน `dbsettings.json` ใช้ไม่ได้จริง — read-only ถ้าเปิด run-from-package, ถูกทับทุกครั้งที่ deploy, และไม่ share ข้าม instance
+- แอปจะ **ไม่ยอมสตาร์ท** ถ้า `Jwt__Key` หรือ `Seed__AdminPassword` ยังเป็นค่า default ของ dev
+
+## 4. Entra ID
+
+โค้ดใช้ `redirectUri = window.location.origin` จึงปรับตามโดเมนเอง — แค่ไปเพิ่มใน App registration →
+**Authentication → Single-page application → Redirect URIs**: `https://<web>.azurestaticapps.net`
+(**เก็บ URI ของ on-prem ไว้ด้วย** เพราะยังใช้งานคู่กัน)
+
+## 5. CI/CD
+
+| Workflow | ทำอะไร |
+|---|---|
+| [.github/workflows/azure-web.yml](.github/workflows/azure-web.yml) | build `frontend/` → Static Web Apps |
+| [.github/workflows/azure-api.yml](.github/workflows/azure-api.yml) | `dotnet publish` → App Service + เช็ค `/health` |
+
+**ต้องตั้งค่าใน GitHub ก่อน** (Settings → Secrets and variables → Actions):
+
+| ชนิด | ชื่อ |
+|---|---|
+| Variables | `AZURE_DEPLOY_ENABLED` = `true` (until set, both workflows are skipped on push), `VITE_API_BASE_URL`, `VITE_AAD_CLIENT_ID`, `VITE_AAD_TENANT_ID`, `AZURE_API_APP_NAME` |
+| Secrets | `AZURE_STATIC_WEB_APPS_API_TOKEN`, `AZURE_API_PUBLISH_PROFILE` |
+
+> ⚠️ **จุดที่พลาดง่ายที่สุด:** `frontend/.env` ถูก gitignore ไว้ ค่า `VITE_AAD_*` จึงไม่ได้อยู่ใน repo
+> และ Vite **bake ค่าเหล่านี้ตอน build** ถ้า workflow ไม่ตั้งให้ จะได้ค่า placeholder → **ปุ่ม Microsoft login พังโดยไม่มี error ตอน build**
+> workflow จึงมี step ที่ fail ทันทีถ้าตัวแปรไม่ครบ
+
+## 6. ตรวจสอบหลัง deploy
+
+| ทดสอบ | คาดหวัง |
+|---|---|
+| `https://<api>.azurewebsites.net/health` | `{"status":"ok"}` (API ต่อ Azure SQL ได้) |
+| `https://<api>.azurewebsites.net/swagger` | **404** (ปิดใน Production แล้ว) |
+| เปิด SWA → login ด้วย **password** | เข้าได้ = CORS + base URL ถูก |
+| login ด้วย **Microsoft** | redirect กลับมาแล้วเข้าได้ |
+| เปิด `/revenue-monthly/<id>` ตรงๆ แล้ว refresh | ไม่ 404 (`staticwebapp.config.json`) |
+| Import + Export Excel อย่างละ 1 ไฟล์ | ไฟล์เปิดได้ |
+| ยอด Revenue Monthly งวดที่ปิดแล้ว | ตรงกับ on-prem เป๊ะ |
+| login เป็น role `User` แล้วยิง `POST /api/v1/revenue-monthly` | 403 |
+
+## ค่าใช้จ่ายโดยประมาณ
+
+Static Web Apps Free $0 + App Service B1 ~$13 + Azure SQL Basic ~$5 ≈ **$18/เดือน** — ควรตั้ง Budget alert ที่ ~$30
+
+## ข้อจำกัดที่ต้องรู้
+
+- SWA Free: **ไม่มี SLA**, custom domain 2 โดเมน, staging 3 environment
+- App Service ตัด request ที่ **230 วินาที** — endpoint ดึง D365 (`/d365/staging/fetch`, `/d365/items/fetch`) ที่วนดึงหลายหน้าอาจโดนตัดถ้าข้อมูลเยอะ
+- Azure SQL **Basic จำกัด 2 GB / 5 DTU** — ถ้าไม่พอ อัปเป็น S0 ได้จาก portal โดยไม่ต้องย้ายข้อมูล
+- `dbo.D365BcSetting.ClientSecret` เก็บเป็น plaintext ใน DB — เดิมอยู่ใน LAN ตอนนี้อยู่บน cloud ควรวางแผนย้ายไป Key Vault

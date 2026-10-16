@@ -16,6 +16,9 @@ public record D365ProjectName(string Number, string? DisplayName);
 /// <summary>A jobPlanningLines line — the item no, its job task, line type, and the LCY amount.</summary>
 public record D365JobPlanLine(string? No, string? JobTaskNo, string? LineType, decimal LineAmountLcy);
 
+/// <summary>A job's PM (and a few labels) from the QERP job entity — unfiltered, for billing.</summary>
+public record D365JobPm(string No, string? ProjectManager, string? PmEmail, string? CustomerName, string? Status);
+
 /// <summary>A job task pulled from the analytics jobTasks entity set.</summary>
 public record D365JobTask(string TaskNo, string? Description);
 
@@ -119,6 +122,42 @@ public class D365BcClient(HttpClient http)
                 CustomerNo: FirstString(el, "customerNo", "sellToCustomerNo", "billToCustomerNo", "customerNumber"),
                 CustomerName: FirstString(el, "customerName", "sellToCustomerName", "billToName"),
                 RawJson: el.GetRawText()));
+        }
+        return jobs;
+    }
+
+    /// <summary>
+    /// Every SOJ job with its Project Manager — deliberately NOT narrowed by the PM codes in the
+    /// settings (unlike <see cref="GetJobsAsync"/>): billing has to label invoices for any job.
+    /// Follows @odata.nextLink. The QERP job entity carries no job name; pair it with
+    /// <see cref="GetProjectsAsync"/> for that.
+    /// </summary>
+    public async Task<List<D365JobPm>> GetAllJobPmsAsync(D365BcSetting s, string token, CancellationToken ct)
+    {
+        var url = $"{BaseUrl}/v2.0/{s.TenantId}/{s.EnvironmentId}/api/{s.ApiPublisher}/{s.ApiGroup}/{s.ApiVersion}"
+                + $"/companies({s.CompanyId})/{JobEntitySet}?$filter={Uri.EscapeDataString("startswith(no,'SOJ')")}";
+
+        var jobs = new List<D365JobPm>();
+        while (!string.IsNullOrEmpty(url))
+        {
+            var body = await GetAsync(url, token, "ดึงรายการ Job", ct);
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("value", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in arr.EnumerateArray())
+                {
+                    var no = FirstString(el, "no", "No", "number");
+                    if (string.IsNullOrWhiteSpace(no)) continue;
+                    jobs.Add(new D365JobPm(no!,
+                        FirstString(el, "qerpProjectManager", "projectManager"),
+                        FirstString(el, "qerpPMEmail", "pmEmail"),
+                        FirstString(el, "billToName", "customerName", "sellToCustomerName"),
+                        FirstString(el, "status")));
+                }
+            }
+            url = root.TryGetProperty("@odata.nextLink", out var next) && next.ValueKind == JsonValueKind.String
+                ? next.GetString() : null;
         }
         return jobs;
     }

@@ -95,12 +95,84 @@ public record RevenueMonthEstimateDto(
     bool CappedStd, bool CappedAct,
     RevenueMonthEstimateSource[] Sources);
 
+// One kept version of a period. Totals are denormalised so the list renders without
+// deserialising the frozen payload.
+public record RevenueMonthArchiveDto(int VersionNo, DateTime ArchivedAt, string? ArchivedBy,
+    string? Reason, bool IsAuto, int JobCount, decimal? TotalStd, decimal? TotalAct,
+    decimal? TargetAmount, bool WasConfirmed);
+// A kept version plus the period exactly as it read when it was kept. Read-only by design:
+// Data is replayed from storage, never recomputed.
+public record RevenueMonthArchiveDetailDto(RevenueMonthArchiveDto Version, RevenueMonthDetailDto Data);
+public record RevenueMonthArchiveCreate(string? Reason);
+
+// ---- Billing KPI ----
+// One imported Posted Sales Invoice line. JobName / ProjectManager are resolved at read time from
+// the Project master and the D365 job staging (the BC export itself only carries Project No.).
+public record BillingLineDto(int Id, string DocumentNo, int LineSeq, DateOnly? PostingDate,
+    string? CustomerNo, string? CustomerName, string? CustomerSearchName,
+    string LineType, string? ItemNo, string? ItemCategoryCode, string? Description,
+    decimal? Quantity, string? UnitOfMeasure, decimal? UnitPrice, decimal? LineAmount,
+    string? ProjectNo, string? ProjectTaskNo, string? JobName, string? ProjectManager,
+    bool IsConfirmed, DateTime? ConfirmedAt, string? ConfirmedBy,
+    Dictionary<int, decimal>? Allocations,    // ResourceId -> Quantity; only on the Allocate screen
+    bool IsAllocLocked, DateTime? AllocLockedAt, string? AllocLockedBy,
+    decimal? MandayRate,                      // rate of the posting year; null = not set up yet
+    decimal? BillingManday,                   // ROUND(LineAmount / MandayRate, 3) — what allocation must add up to
+    decimal? OtherQuantity, string? OtherNote);   // allocated outside the resource master
+public record BillingOtherRequest(decimal? Quantity, string? Note);
+// Auto Allocate: write one target (a resource's cell, or "Other") on many lines in one go.
+// The screen works out each line's figure (formula / fixed / remaining); null or 0 clears the cell.
+public record BillingBulkAllocateItem(int LineId, decimal? Quantity);
+public record BillingBulkAllocateRequest(int? ResourceId, bool Other, BillingBulkAllocateItem[] Items);
+public record BillingBulkAllocateResult(int Updated, int Skipped);
+// Excel export of the Allocate screen: the filtered lines' ids in screen order, plus a short
+// description of the filters for the sheet's header note.
+public record BillingExportRequest(int[] Ids, string? FilterSummary);
+// One year's billing manday rate (baht per manday).
+public record BillingRateDto(int Year, decimal Rate, DateTime UpdatedAt, string? UpdatedBy, int Lines, int LockedLines);
+public record BillingRateUpsert(decimal Rate);
+// Saving a rate also rescales the allocations of that year's locked lines.
+public record BillingRateSaveResult(BillingRateDto Rate, int RescaledLines);
+// Lock/unlock: Skipped = selected lines that didn't qualify (not fully allocated / not confirmed).
+public record BillingLockResult(int Updated, int Skipped);
+// A Billing-KPI resource = one column of the allocation matrix.
+public record BillingResourceDto(int ResourceId, string Code, string Name, string? Position);
+public record BillingAllocationRequest(decimal? Quantity);   // null / 0 clears the cell
+// Billing KPI Manday: allocated manday per resource per posting year (confirmed, live lines only).
+// IsBillingKpi=false rows only appear when someone was un-ticked after work was allocated to them,
+// so their manday never silently drops out of the totals.
+public record BillingKpiRow(int ResourceId, string Code, string Name, string? Position, bool IsBillingKpi,
+    Dictionary<int, decimal> ByYear, decimal Total);
+// MandayByYear = sum of Billing Manday (Line Amount / rate) of confirmed lines — what allocation
+// should add up to. MissingRateYears = years with confirmed lines but no rate set up yet.
+// OtherByYear = manday allocated outside the resource master; already included in AllocatedByYear.
+// RateByYear = the year's standard manday rate, shown under each year header (the rate list itself
+// is Admin only, so the KPI carries what every role needs to see).
+public record BillingKpiDto(int[] Years, BillingKpiRow[] Rows,
+    Dictionary<int, decimal> AllocatedByYear, Dictionary<int, decimal> MandayByYear, int[] MissingRateYears,
+    Dictionary<int, decimal> OtherByYear, Dictionary<int, decimal> RateByYear,
+    Dictionary<int, decimal> AmountByYear);   // confirmed lines' Line Amount (Total Amount)
+public record BillingAllocationResult(int LineId, int ResourceId, decimal? Quantity);
+public record BillingYearDto(int Year, int Lines);
+// SkippedExistingDocuments: documents already in the system (pending, confirmed or deleted) —
+// posted invoices never change in BC, so they are not imported again.
+public record BillingImportResult(int Imported, int Documents, int SkippedExistingDocuments,
+    int SkippedBlankType);
+public record BillingConfirmRequest(int[] Ids);
+public record BillingDeleteResult(int Deleted, int SkippedConfirmed);
+public record BillingConfirmResult(int Updated);
+// Result of refreshing the local BC job cache (names + PMs) used to label invoice lines.
+public record BillingJobSyncResult(int Jobs, int WithName, int WithPm, DateTime FetchedAt);
+public record BillingJobCacheDto(int Jobs, DateTime? FetchedAt);
+
 // ---- User management (Admin) ----
 public record UserDto(int UserId, string Email, string DisplayName, bool IsActive, string[] Roles);
 public record UserUpsert(string Email, string DisplayName, bool IsActive, string[] Roles);
 
 // ---- Resource ----
-public record ResourceDto(int ResourceId, string Code, string Name, string? Position, bool IsActive);
+public record ResourceDto(int ResourceId, string Code, string Name, string? Position, bool IsActive,
+    bool IsBillingKpi);
+public record ResourceBillingKpiRequest(bool IsBillingKpi);
 public record ResourceUpsert(string Code, string Name, string? Position, bool IsActive);
 
 // ---- Master Item (synced from D365BC) ----
@@ -116,8 +188,10 @@ public record ImportResult(int Created, int Updated, int Skipped, List<string> E
 
 // ---- DB Config ----
 // Password is never returned; HasPassword tells the UI whether one is already stored.
+// IsReadOnly is true when the host owns the connection (Azure App Service configuration) —
+// the UI then hides Save, and PUT is refused.
 public record DbConfigDto(string Server, string Database, bool IntegratedSecurity, string? Username,
-    bool HasPassword, bool TrustServerCertificate, bool Encrypt);
+    bool HasPassword, bool TrustServerCertificate, bool Encrypt, bool IsReadOnly);
 // On save/test: leave Password empty to keep the currently-stored one.
 public record DbConfigUpsert(string Server, string Database, bool IntegratedSecurity, string? Username,
     string? Password, bool TrustServerCertificate, bool Encrypt);

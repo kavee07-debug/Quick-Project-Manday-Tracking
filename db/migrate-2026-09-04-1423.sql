@@ -16,7 +16,10 @@
    Run:  sqlcmd -S <DBSERVER> -d QtmManday -C -i db\migrate-2026-09-04-1423.sql
          (SQL auth: add -U <user> -P <pwd>;  Windows auth: add -E)
    ================================================================ */
-USE QtmManday;
+:on error exit
+/* Azure SQL ไม่รองรับ USE — ต้องระบุฐานข้อมูลตอนเรียก (sqlcmd -d QtmManday) */
+IF DB_NAME() IN (N'master', N'tempdb', N'model', N'msdb')
+    THROW 50000, N'รันผิดฐานข้อมูล — ใส่ -d QtmManday ตอนเรียก sqlcmd', 1;
 GO
 
 PRINT '1/3  RevenueMonth';

@@ -115,6 +115,27 @@ export function AppLayout() {
               <GearIcon size={20} /> <span className="sidebar__label">ตั้งค่า DB</span>
             </NavLink>
           )}
+          {/* Billing KPI — the KPI and Allocate (view mode) are open to every role; Import and the
+              rate setup are Admin only. The API enforces the same split. */}
+          <div className="sidebar__section" title="Billing KPI">
+            <span className="sidebar__label">Billing KPI</span>
+          </div>
+          <NavLink to="/billing/kpi" className={navItem} title="Billing KPI Manday">
+            <ChartIcon size={20} /> <span className="sidebar__label">Billing KPI Manday</span>
+          </NavLink>
+          {hasRole('Admin') && (
+            <NavLink to="/billing/import" className={navItem} title="Billing Manday Import">
+              <BoxIcon size={20} /> <span className="sidebar__label">Billing Manday Import</span>
+            </NavLink>
+          )}
+          <NavLink to="/billing/allocate" className={navItem} title="Billing Manday Allocate">
+            <ChartIcon size={20} /> <span className="sidebar__label">Billing Manday Allocate</span>
+          </NavLink>
+          {hasRole('Admin') && (
+            <NavLink to="/billing/rates" className={navItem} title="Billing Manday Rate">
+              <GearIcon size={20} /> <span className="sidebar__label">Billing Manday Rate</span>
+            </NavLink>
+          )}
           {hasRole('Admin') && (
             <>
               <div className="sidebar__section" title="API">

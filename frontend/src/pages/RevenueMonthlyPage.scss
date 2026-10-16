@@ -98,6 +98,53 @@
     max-width: 520px;
   }
 
+  // ----- archive versions -----
+  &__archive {
+    margin-bottom: var(--space-4);
+    border-left: 4px solid var(--color-purple);
+
+    // While a version is open the whole screen is showing frozen data — say so loudly.
+    &--viewing { background: rgba(124, 58, 237, 0.06); }
+  }
+  &__archive-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  &__archive-title {
+    font-weight: var(--font-weight-bold);
+    color: var(--color-purple);
+  }
+  &__archive-pick { margin-left: auto; max-width: 320px; }
+  &__archive-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-top: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--color-purple);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+  }
+  &__archive-table {
+    margin-top: var(--space-3);
+    th { white-space: nowrap; }
+    tr.is-active td { background: rgba(124, 58, 237, 0.1); }
+  }
+  &__archive-link {
+    border: none;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+    font-weight: var(--font-weight-bold);
+    color: var(--color-purple);
+    text-decoration: underline;
+    &:disabled { cursor: default; opacity: 0.5; }
+  }
+
   // ----- filter bar -----
   &__filterbar {
     display: flex;

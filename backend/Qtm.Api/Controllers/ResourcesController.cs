@@ -17,7 +17,7 @@ public class ResourcesController(QtmDbContext db) : ControllerBase
     private static readonly string[] ValidPositions = ["Dev", "SA", "PM"];
 
     private static ResourceDto ToDto(ResourceItem r) =>
-        new(r.ResourceId, r.Code, r.Name, r.Position, r.IsActive);
+        new(r.ResourceId, r.Code, r.Name, r.Position, r.IsActive, r.IsBillingKpi);
 
     private static string? NormalizePosition(string? p) => string.IsNullOrWhiteSpace(p) ? null : p.Trim();
 
@@ -78,6 +78,22 @@ public class ResourcesController(QtmDbContext db) : ControllerBase
         return Ok(ToDto(r));
     }
 
+    /// <summary>
+    /// Marks whether this resource counts toward the Billing KPI (a column of the allocation matrix).
+    /// Its own endpoint rather than a field on ResourceUpsert, so the existing edit form — which
+    /// doesn't know about the flag — can never clear it by saving. Admin only, like the Billing screens.
+    /// </summary>
+    [HttpPut("{id:int}/billing-kpi")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<ResourceDto>> SetBillingKpi(int id, ResourceBillingKpiRequest req)
+    {
+        var r = await db.Resources.FindAsync(id);
+        if (r is null) return NotFound();
+        r.IsBillingKpi = req.IsBillingKpi;
+        await db.SaveChangesAsync();
+        return Ok(ToDto(r));
+    }
+
     [HttpDelete("{id:int}")]
     [Authorize(Roles = Roles.Managers)]
     public async Task<IActionResult> Delete(int id)
@@ -88,6 +104,8 @@ public class ResourcesController(QtmDbContext db) : ControllerBase
         // Resources referenced by manday rows can't be hard-deleted (FK) — deactivate instead.
         if (await db.MandayEntries.AnyAsync(m => m.ResourceId == id))
             return Conflict(new { message = "Resource นี้ถูกใช้ในรายการ manday แล้ว ลบไม่ได้ — ให้ปิดใช้งาน (Inactive) แทน" });
+        if (await db.BillingAllocations.AnyAsync(a => a.ResourceId == id))
+            return Conflict(new { message = "Resource นี้มีการ Allocate Billing Manday แล้ว ลบไม่ได้ — ให้ปิดใช้งาน (Inactive) แทน" });
 
         db.Resources.Remove(r);
         await db.SaveChangesAsync();

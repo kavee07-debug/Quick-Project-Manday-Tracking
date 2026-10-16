@@ -29,8 +29,17 @@
   &__ms {
     margin-top: var(--space-3);
     width: 100%;
+    display: flex;
+    align-items: center;
     justify-content: center;
+    gap: var(--space-3);
     font-weight: var(--font-weight-bold);
+  }
+  // Sized off the label so the mark tracks the button's text, and never squashed by the flex row.
+  &__ms-logo {
+    flex-shrink: 0;
+    width: 1.15em;
+    height: 1.15em;
   }
   &__divider {
     display: flex;

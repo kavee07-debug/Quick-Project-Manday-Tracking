@@ -23,7 +23,8 @@ public class ConfigController(DbSettingsProvider provider) : ControllerBase
         return Ok(new DbConfigDto(
             s.Server, s.Database, s.IntegratedSecurity, s.Username,
             HasPassword: !string.IsNullOrEmpty(s.Password),
-            s.TrustServerCertificate, s.Encrypt));
+            s.TrustServerCertificate, s.Encrypt,
+            IsReadOnly: !provider.AllowRuntimeOverride));
     }
 
     [HttpPost("db/test")]
@@ -32,7 +33,8 @@ public class ConfigController(DbSettingsProvider provider) : ControllerBase
         var settings = Merge(req);
         try
         {
-            await using var con = new SqlConnection(DbSettingsProvider.Build(settings));
+            await using var con = new SqlConnection(
+                DbSettingsProvider.Build(settings, provider.ConnectTimeoutSeconds));
             await con.OpenAsync(ct);
             await using var cmd = con.CreateCommand();
             cmd.CommandText = "SELECT 1";
@@ -48,12 +50,19 @@ public class ConfigController(DbSettingsProvider provider) : ControllerBase
     [HttpPut("db")]
     public ActionResult<DbConfigDto> Save(DbConfigUpsert req)
     {
+        // Hosted (Azure) installs own the connection through host configuration — writing
+        // dbsettings.json there is either impossible or silently per-instance, so refuse early.
+        if (!provider.AllowRuntimeOverride)
+            return Conflict(new { message = "การเชื่อมต่อฐานข้อมูลถูกกำหนดจาก App Service Configuration — " +
+                                            "แก้ไขที่นั่นแล้ว restart แอป (หน้านี้ดูและทดสอบได้อย่างเดียว)" });
+
         var settings = Merge(req);
         provider.Update(settings);
         return Ok(new DbConfigDto(
             settings.Server, settings.Database, settings.IntegratedSecurity, settings.Username,
             HasPassword: !string.IsNullOrEmpty(settings.Password),
-            settings.TrustServerCertificate, settings.Encrypt));
+            settings.TrustServerCertificate, settings.Encrypt,
+            IsReadOnly: false));
     }
 
     // Maps the request to settings, retaining the currently-stored password when the field is blank.

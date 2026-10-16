@@ -22,6 +22,9 @@ import D365JobPage from './pages/D365JobPage';
 import D365TimesheetPage from './pages/D365TimesheetPage';
 import UsersPage from './pages/UsersPage';
 import ConfigPage from './pages/ConfigPage';
+import BillingLinesPage from './pages/BillingLinesPage';
+import BillingKpiPage from './pages/BillingKpiPage';
+import BillingRatesPage from './pages/BillingRatesPage';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { session } = useAuth();
@@ -61,6 +64,11 @@ export default function App() {
         <Route path="/d365/timesheet" element={<D365TimesheetPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/config" element={<ConfigPage />} />
+        {/* Same component for both — `key` remounts it so each screen starts with its own state. */}
+        <Route path="/billing/kpi" element={<BillingKpiPage />} />
+        <Route path="/billing/rates" element={<BillingRatesPage />} />
+        <Route path="/billing/import" element={<BillingLinesPage key="import" mode="import" />} />
+        <Route path="/billing/allocate" element={<BillingLinesPage key="allocate" mode="allocate" />} />
         <Route path="/" element={<Navigate to="/projects" replace />} />
       </Route>
       <Route path="*" element={<Navigate to="/projects" replace />} />

@@ -1,0 +1,75 @@
+# Builds the React SPA and publishes it to Azure Static Web Apps (Free plan).
+#
+# The Free plan cannot link an App Service backend, so the SPA and the API live on separate
+# origins and talk over CORS. That makes VITE_API_BASE_URL load-bearing: Vite bakes it in at
+# build time, and if it is missing the bundle falls back to relative "/api/v1" and every call
+# hits Static Web Apps instead of the API.
+#
+# frontend/.env is gitignored, so the Entra values are NOT in the repository either — without
+# them MSAL is built with placeholder ids and the Microsoft button fails at runtime with no
+# build error. All three must exist as repository variables/secrets.
+#
+# Required repository variables (Settings > Secrets and variables > Actions > Variables):
+#   VITE_API_BASE_URL   https://<api-app>.azurewebsites.net
+#   VITE_AAD_CLIENT_ID  Entra app registration - Application (client) ID
+#   VITE_AAD_TENANT_ID  Entra app registration - Directory (tenant) ID
+# Required secret:
+#   AZURE_STATIC_WEB_APPS_API_TOKEN   (Static Web App > Manage deployment token)
+
+name: Deploy web (Azure Static Web Apps)
+
+on:
+  push:
+    branches: [main]
+    paths: ['frontend/**', '.github/workflows/azure-web.yml']
+  workflow_dispatch:
+
+jobs:
+  build_and_deploy:
+    # Skipped (not failed) until Azure is set up: repo variable AZURE_DEPLOY_ENABLED = true.
+    if: vars.AZURE_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Fail early if the build inputs are missing
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_AAD_CLIENT_ID: ${{ vars.VITE_AAD_CLIENT_ID }}
+          VITE_AAD_TENANT_ID: ${{ vars.VITE_AAD_TENANT_ID }}
+        run: |
+          missing=
+          for v in VITE_API_BASE_URL VITE_AAD_CLIENT_ID VITE_AAD_TENANT_ID; do
+            [ -n "${!v}" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository variables:$missing — the deployed app would be broken at runtime, not at build time."
+            exit 1
+          fi
+
+      - name: Build
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_AAD_CLIENT_ID: ${{ vars.VITE_AAD_CLIENT_ID }}
+          VITE_AAD_TENANT_ID: ${{ vars.VITE_AAD_TENANT_ID }}
+        run: npm run build
+
+      - name: Deploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: frontend/dist
+          skip_app_build: true
+          skip_api_build: true

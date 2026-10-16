@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -20,7 +21,8 @@ namespace Qtm.Api.Controllers;
 [ApiController]
 [Route("api/v1/revenue-monthly")]
 [Authorize]
-public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : ControllerBase
+public class RevenueMonthlyController(
+    QtmDbContext db, ExcelService excel, ILogger<RevenueMonthlyController> logger) : ControllerBase
 {
     private const string SidePrev = "Prev";
     private const string SideCurr = "Curr";
@@ -140,6 +142,20 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
         month.ConfirmedBy = CurrentUser();
         month.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+
+        // Closing the month is the moment worth keeping: this version is the set of figures the
+        // period was closed on, whatever happens to it after a later Reopen.
+        // Best-effort, though: the confirm above is already saved, so a failed archive must not
+        // turn a successful close into a 500 (e.g. a server missing the archive migration).
+        try
+        {
+            await ArchiveNow(month, "Confirm Revenue", isAuto: true);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Auto-archive on Confirm failed for RevenueMonth {Id}; the confirm itself was saved.",
+                month.RevenueMonthId);
+        }
         return await BuildDetail(month);
     }
 
@@ -170,6 +186,118 @@ public class RevenueMonthlyController(QtmDbContext db, ExcelService excel) : Con
         await db.SaveChangesAsync();
         return NoContent();
     }
+
+    // ---- Archive versions ----------------------------------------------------------------
+    // A version is a frozen copy of the computed period, not a pointer into the live tables:
+    // it has to keep reading the same after a re-import, a hand edit, or a change to the
+    // calculation itself. Nothing updates an archive row once written.
+
+    private static readonly JsonSerializerOptions ArchiveJson = new() { PropertyNameCaseInsensitive = true };
+
+    /// <summary>Every kept version of a period, newest first.</summary>
+    [HttpGet("{id:int}/archives")]
+    public async Task<ActionResult<IEnumerable<RevenueMonthArchiveDto>>> ListArchives(int id)
+    {
+        if (!await db.RevenueMonths.AnyAsync(m => m.RevenueMonthId == id))
+            return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
+
+        var rows = await db.RevenueMonthArchives
+            .Where(a => a.RevenueMonthId == id)
+            .OrderByDescending(a => a.VersionNo)
+            .ToListAsync();
+        return Ok(rows.Select(ToArchiveDto));
+    }
+
+    /// <summary>One kept version, replayed exactly as it was stored.</summary>
+    [HttpGet("{id:int}/archives/{versionNo:int}")]
+    public async Task<ActionResult<RevenueMonthArchiveDetailDto>> GetArchive(int id, int versionNo)
+    {
+        var row = await db.RevenueMonthArchives
+            .FirstOrDefaultAsync(a => a.RevenueMonthId == id && a.VersionNo == versionNo);
+        if (row is null) return NotFound(new { message = $"ไม่พบ Version {versionNo} ของงวดนี้" });
+
+        var data = JsonSerializer.Deserialize<RevenueMonthDetailDto>(row.PayloadJson, ArchiveJson);
+        if (data is null) return StatusCode(500, new { message = "ข้อมูล Version ที่เก็บไว้เสียหาย อ่านไม่ได้" });
+
+        return Ok(new RevenueMonthArchiveDetailDto(ToArchiveDto(row), data));
+    }
+
+    /// <summary>Keeps the period as it reads right now as the next version.</summary>
+    [HttpPost("{id:int}/archives")]
+    [Authorize(Roles = Roles.Managers)]
+    public async Task<ActionResult<RevenueMonthArchiveDto>> CreateArchive(int id, RevenueMonthArchiveCreate? req)
+    {
+        var month = await db.RevenueMonths.FirstOrDefaultAsync(m => m.RevenueMonthId == id);
+        if (month is null) return NotFound(new { message = "ไม่พบงวดที่ระบุ" });
+        // Archiving reads the period, it never writes to it — so a confirmed (locked) month is fine.
+
+        var row = await ArchiveNow(month, Trim(req?.Reason), isAuto: false);
+        return Ok(ToArchiveDto(row));
+    }
+
+    /// <summary>Removes a kept version. Admin only — a version is meant to stay put.</summary>
+    [HttpDelete("{id:int}/archives/{versionNo:int}")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<IActionResult> DeleteArchive(int id, int versionNo)
+    {
+        var row = await db.RevenueMonthArchives
+            .FirstOrDefaultAsync(a => a.RevenueMonthId == id && a.VersionNo == versionNo);
+        if (row is null) return NotFound(new { message = $"ไม่พบ Version {versionNo} ของงวดนี้" });
+
+        db.RevenueMonthArchives.Remove(row);
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Writes the current computed period as the next version. VersionNo is max+1 per period;
+    /// two people archiving at once collide on the unique index, so take the number again once.
+    /// </summary>
+    private async Task<RevenueMonthArchive> ArchiveNow(RevenueMonth month, string? reason, bool isAuto)
+    {
+        var lines = Compute(
+            await db.RevenueMonthSnapshots.Where(s => s.RevenueMonthId == month.RevenueMonthId).ToListAsync(),
+            await db.RevenueMonthManualLines.Where(x => x.RevenueMonthId == month.RevenueMonthId).ToListAsync());
+        var detail = new RevenueMonthDetailDto(ToDto(month, lines), [.. lines]);
+        var payload = JsonSerializer.Serialize(detail, ArchiveJson);
+
+        for (var attempt = 0; ; attempt++)
+        {
+            var next = 1 + await db.RevenueMonthArchives
+                .Where(a => a.RevenueMonthId == month.RevenueMonthId)
+                .Select(a => (int?)a.VersionNo).MaxAsync() ?? 1;
+
+            var row = new RevenueMonthArchive
+            {
+                RevenueMonthId = month.RevenueMonthId,
+                VersionNo = next,
+                ArchivedAt = DateTime.UtcNow,
+                ArchivedBy = CurrentUser(),
+                Reason = reason,
+                IsAuto = isAuto,
+                JobCount = lines.Count,
+                TotalStd = lines.Sum(l => l.AmountStd),
+                TotalAct = lines.Sum(l => l.AmountAct),
+                TargetAmount = month.TargetAmount,
+                WasConfirmed = month.IsConfirmed,
+                PayloadJson = payload,
+            };
+            db.RevenueMonthArchives.Add(row);
+            try
+            {
+                await db.SaveChangesAsync();
+                return row;
+            }
+            catch (DbUpdateException) when (attempt == 0)
+            {
+                db.Entry(row).State = EntityState.Detached;
+            }
+        }
+    }
+
+    private static RevenueMonthArchiveDto ToArchiveDto(RevenueMonthArchive a) =>
+        new(a.VersionNo, a.ArchivedAt, a.ArchivedBy, a.Reason, a.IsAuto,
+            a.JobCount, a.TotalStd, a.TotalAct, a.TargetAmount, a.WasConfirmed);
 
     /// <summary>Imports one snapshot side. Re-importing replaces that side entirely (the other side is untouched).</summary>
     [HttpPost("{id:int}/import/{side}")]

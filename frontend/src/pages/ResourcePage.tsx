@@ -10,7 +10,10 @@ import './ResourcePage.scss';
 const empty: ResourceUpsert = { code: '', name: '', position: '', isActive: true };
 
 export default function ResourcePage() {
-  const { isManager } = useAuth();
+  const { isManager, hasRole } = useAuth();
+  // Billing KPI is Admin-only for now, so is the flag that feeds it.
+  const isAdmin = hasRole('Admin');
+  const [savingKpi, setSavingKpi] = useState<number | null>(null);
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +67,20 @@ export default function ResourcePage() {
     }
   }
 
+  /** Ticks / unticks "counts toward Billing KPI" — saved straight away, no form. */
+  async function toggleBillingKpi(r: Resource, value: boolean) {
+    setSavingKpi(r.resourceId);
+    setError(null);
+    try {
+      const saved = await api.put<Resource>(`/resources/${r.resourceId}/billing-kpi`, { isBillingKpi: value });
+      setResources((prev) => prev.map((x) => (x.resourceId === saved.resourceId ? saved : x)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'บันทึก KPI Billing ไม่สำเร็จ');
+    } finally {
+      setSavingKpi(null);
+    }
+  }
+
   async function remove(r: Resource) {
     if (!confirm(`ลบ resource "${r.name}"?`)) return;
     try {
@@ -96,14 +113,19 @@ export default function ResourcePage() {
               <th>ชื่อ</th>
               <th>Position</th>
               <th>สถานะ</th>
+              {isAdmin && (
+                <th className="center" title="ติ๊กเพื่อนำ Resource นี้ไปคิด KPI Billing (เป็นคอลัมน์ในหน้า Billing Manday Allocate)">
+                  KPI Billing
+                </th>
+              )}
               <th></th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="muted">กำลังโหลด…</td></tr>
+              <tr><td colSpan={isAdmin ? 6 : 5} className="muted">กำลังโหลด…</td></tr>
             ) : resources.length === 0 ? (
-              <tr><td colSpan={5} className="muted">ยังไม่มี resource</td></tr>
+              <tr><td colSpan={isAdmin ? 6 : 5} className="muted">ยังไม่มี resource</td></tr>
             ) : (
               resources.map((r) => (
                 <tr key={r.resourceId}>
@@ -115,6 +137,13 @@ export default function ResourcePage() {
                       {r.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
+                  {isAdmin && (
+                    <td className="center">
+                      <input type="checkbox" checked={r.isBillingKpi} disabled={savingKpi === r.resourceId}
+                        aria-label={`คิด KPI Billing: ${r.name}`}
+                        onChange={(e) => toggleBillingKpi(r, e.target.checked)} />
+                    </td>
+                  )}
                   <td className="num">
                     {isManager && (
                       <span style={{ display: 'inline-flex', gap: 'var(--space-2)' }}>

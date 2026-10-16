@@ -13,6 +13,7 @@
       "name": "backend",
       "runtimeExecutable": "dotnet",
       "runtimeArgs": ["run", "--no-launch-profile", "--urls", "http://localhost:3007"],
+      "env": { "ASPNETCORE_ENVIRONMENT": "Development" },
       "port": 3007,
       "autoPort": false,
       "cwd": "backend/Qtm.Api"

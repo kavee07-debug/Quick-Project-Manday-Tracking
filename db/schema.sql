@@ -1,17 +1,32 @@
 /* ============================================================
    Quick Project Manday Tracking — SQL Server schema
-   Target: SQL Server 2019+
+   Target: SQL Server 2019+ and Azure SQL Database
    Hierarchy: Project -> Task -> Manday (Estimate & Actual)
    Includes: RBAC (Users/Roles), in-app Config, D365BC mock log
+
+   ⚠️ DESTRUCTIVE — drops every table and re-seeds sample rows. Fresh installs only;
+      never run it against a database that already holds real data.
+
+   The database must already exist (Azure SQL has no usable CREATE DATABASE from a user
+   database, and no USE), so name it on the command line:
+     on-prem : sqlcmd -S <DBSERVER> -d QtmManday -C -E -i db\schema.sql
+               (create it once first: CREATE DATABASE QtmManday;)
+     Azure   : create the database in the portal, then
+               sqlcmd -S <server>.database.windows.net -d QtmManday -U <user> -P <pwd> -C -i db\schema.sql
    ============================================================ */
 
-IF DB_ID(N'QtmManday') IS NULL
-    CREATE DATABASE QtmManday;
-GO
-USE QtmManday;
+:on error exit
+/* Azure SQL ไม่รองรับ USE — ต้องระบุฐานข้อมูลตอนเรียก (sqlcmd -d QtmManday) */
+IF DB_NAME() IN (N'master', N'tempdb', N'model', N'msdb')
+    THROW 50000, N'รันผิดฐานข้อมูล — ใส่ -d QtmManday ตอนเรียก sqlcmd', 1;
 GO
 
 /* ---------- Drop in dependency order (for re-runs) ---------- */
+IF OBJECT_ID(N'dbo.BillingAllocation', N'U')  IS NOT NULL DROP TABLE dbo.BillingAllocation;   -- FK -> BillingInvoiceLine, Resource
+IF OBJECT_ID(N'dbo.BillingMandayRate', N'U')  IS NOT NULL DROP TABLE dbo.BillingMandayRate;
+IF OBJECT_ID(N'dbo.BillingInvoiceLine', N'U') IS NOT NULL DROP TABLE dbo.BillingInvoiceLine;
+IF OBJECT_ID(N'dbo.BcJobInfo', N'U')          IS NOT NULL DROP TABLE dbo.BcJobInfo;
+IF OBJECT_ID(N'dbo.RevenueMonthArchive', N'U') IS NOT NULL DROP TABLE dbo.RevenueMonthArchive;  -- FK -> RevenueMonth
 IF OBJECT_ID(N'dbo.RevenueMonthSetting', N'U') IS NOT NULL DROP TABLE dbo.RevenueMonthSetting;
 IF OBJECT_ID(N'dbo.RevenueMonthManualLine', N'U') IS NOT NULL DROP TABLE dbo.RevenueMonthManualLine;  -- FK -> RevenueMonth
 IF OBJECT_ID(N'dbo.RevenueMonthSnapshot', N'U') IS NOT NULL DROP TABLE dbo.RevenueMonthSnapshot;  -- FK -> RevenueMonth
@@ -77,6 +92,7 @@ CREATE TABLE dbo.Resource (
     Name          NVARCHAR(200) NOT NULL,     -- display name, e.g. Kavee
     Position      NVARCHAR(20) NULL,          -- Dev | SA | PM
     IsActive      BIT NOT NULL CONSTRAINT DF_Resource_IsActive DEFAULT (1),
+    IsBillingKpi  BIT NOT NULL CONSTRAINT DF_Resource_IsBillingKpi DEFAULT (0),  -- counts toward Billing KPI
     CONSTRAINT UQ_Resource_Code UNIQUE (Code),
     CONSTRAINT CK_Resource_Position CHECK (Position IS NULL OR Position IN (N'Dev', N'SA', N'PM'))
 );
@@ -452,6 +468,138 @@ CREATE TABLE dbo.RevenueMonthManualLine (
     CONSTRAINT FK_RevenueMonthManualLine_Month FOREIGN KEY (RevenueMonthId)
         REFERENCES dbo.RevenueMonth(RevenueMonthId) ON DELETE CASCADE,
     CONSTRAINT UQ_RevenueMonthManualLine_Job UNIQUE (RevenueMonthId, JobNo)
+);
+GO
+
+/* An immutable snapshot of a whole period, numbered per period. The figures live in
+   PayloadJson as the fully-computed detail rather than as FKs into the live tables, so a
+   version keeps reading the same forever — even after the period is re-imported, re-edited,
+   or the calculation changes. Nothing updates a row here after the INSERT. */
+CREATE TABLE dbo.RevenueMonthArchive (
+    RevenueMonthArchiveId INT IDENTITY(1,1) NOT NULL
+        CONSTRAINT PK_RevenueMonthArchive PRIMARY KEY,
+    RevenueMonthId INT NOT NULL,
+    VersionNo      INT NOT NULL,                  -- 1, 2, 3 … per period
+    ArchivedAt     DATETIME2(0) NOT NULL
+        CONSTRAINT DF_RevenueMonthArchive_ArchivedAt DEFAULT (SYSUTCDATETIME()),
+    ArchivedBy     NVARCHAR(200) NULL,
+    Reason         NVARCHAR(300) NULL,            -- why it was kept, free text
+    IsAuto         BIT NOT NULL                   -- 1 = taken automatically on Confirm
+        CONSTRAINT DF_RevenueMonthArchive_IsAuto DEFAULT (0),
+    -- Denormalised so the version list renders without parsing the payload.
+    JobCount       INT NOT NULL
+        CONSTRAINT DF_RevenueMonthArchive_JobCount DEFAULT (0),
+    TotalStd       DECIMAL(18,2) NULL,
+    TotalAct       DECIMAL(18,2) NULL,
+    TargetAmount   DECIMAL(18,2) NULL,
+    WasConfirmed   BIT NOT NULL
+        CONSTRAINT DF_RevenueMonthArchive_WasConfirmed DEFAULT (0),
+    PayloadJson    NVARCHAR(MAX) NOT NULL,        -- frozen RevenueMonthDetailDto
+    CONSTRAINT FK_RevenueMonthArchive_Month FOREIGN KEY (RevenueMonthId)
+        REFERENCES dbo.RevenueMonth(RevenueMonthId) ON DELETE CASCADE,
+    CONSTRAINT UQ_RevenueMonthArchive_Version UNIQUE (RevenueMonthId, VersionNo)
+);
+GO
+
+/* ============================================================
+   Billing KPI — lines of the BC "Posted Sales Invoice Lines" export.
+   No per-line key in the export, so a line = Document No. + its position (LineSeq).
+   Posted invoices never change in BC: an import only adds unseen documents.
+   Deleted lines stay as tombstones (IsDeleted) so a later export can't bring them back.
+   No FK to Project: ProjectNo is matched by code at read time.
+   ============================================================ */
+CREATE TABLE dbo.BillingInvoiceLine (
+    BillingInvoiceLineId INT IDENTITY(1,1) NOT NULL
+        CONSTRAINT PK_BillingInvoiceLine PRIMARY KEY,
+    DocumentNo         NVARCHAR(30)  NOT NULL,     -- IV2601-0001 (also TA…, DB…)
+    LineSeq            INT           NOT NULL,     -- position of the line within its document
+    PostingDate        DATE          NULL,
+    CustomerNo         NVARCHAR(30)  NULL,
+    CustomerName       NVARCHAR(300) NULL,
+    CustomerSearchName NVARCHAR(150) NULL,
+    LineType           NVARCHAR(20)  NOT NULL,     -- Item | Resource
+    ItemNo             NVARCHAR(50)  NULL,         -- BC "No."
+    ItemCategoryCode   NVARCHAR(50)  NULL,
+    Description        NVARCHAR(250) NULL,
+    Quantity           DECIMAL(18,4) NULL,         -- negative on credit/reversal lines
+    UnitOfMeasure      NVARCHAR(20)  NULL,         -- MD | UNIT | TRIPS | …
+    UnitPrice          DECIMAL(18,2) NULL,         -- Unit Price Excl. VAT
+    LineDiscountPct    DECIMAL(9,4)  NULL,
+    LineAmount         DECIMAL(18,2) NULL,         -- Line Amount Excl. VAT
+    AmountInclVat      DECIMAL(18,2) NULL,
+    BoiCode            NVARCHAR(20)  NULL,
+    ProjectNo          NVARCHAR(50)  NULL,         -- job code, matched to Project.Code
+    ProjectTaskNo      NVARCHAR(50)  NULL,
+    ContractEntryNo    INT           NULL,
+    JobPlanningLineNo  INT           NULL,
+    JobPlanningDescription NVARCHAR(250) NULL,
+    IsConfirmed        BIT NOT NULL
+        CONSTRAINT DF_BillingInvoiceLine_IsConfirmed DEFAULT (0),
+    ConfirmedAt        DATETIME2(0)  NULL,
+    ConfirmedBy        NVARCHAR(200) NULL,
+    IsDeleted          BIT NOT NULL
+        CONSTRAINT DF_BillingInvoiceLine_IsDeleted DEFAULT (0),
+    DeletedAt          DATETIME2(0)  NULL,
+    DeletedBy          NVARCHAR(200) NULL,
+    IsAllocLocked      BIT NOT NULL                -- allocation finished and locked
+        CONSTRAINT DF_BillingInvoiceLine_IsAllocLocked DEFAULT (0),
+    AllocLockedAt      DATETIME2(0)  NULL,
+    AllocLockedBy      NVARCHAR(200) NULL,
+    OtherQuantity      DECIMAL(18,4) NULL,         -- allocated outside the resource master (e.g. another dept)
+    OtherNote          NVARCHAR(200) NULL,         -- who / which department that is
+    SourceFileName     NVARCHAR(260) NULL,
+    ImportedAt         DATETIME2(0)  NOT NULL
+        CONSTRAINT DF_BillingInvoiceLine_ImportedAt DEFAULT (SYSUTCDATETIME()),
+    ImportedBy         NVARCHAR(200) NULL,
+    CONSTRAINT UQ_BillingInvoiceLine_DocLine UNIQUE (DocumentNo, LineSeq)
+);
+GO
+CREATE INDEX IX_BillingInvoiceLine_PostingDate ON dbo.BillingInvoiceLine(PostingDate);
+CREATE INDEX IX_BillingInvoiceLine_ProjectNo   ON dbo.BillingInvoiceLine(ProjectNo);
+GO
+
+/* How much of one invoice line's Quantity each KPI resource gets (signed: credit lines are negative).
+   A blank cell is no row. */
+CREATE TABLE dbo.BillingAllocation (
+    BillingInvoiceLineId INT NOT NULL,
+    ResourceId           INT NOT NULL,
+    Quantity             DECIMAL(18,4) NOT NULL,
+    UpdatedAt            DATETIME2(0)  NOT NULL
+        CONSTRAINT DF_BillingAllocation_UpdatedAt DEFAULT (SYSUTCDATETIME()),
+    UpdatedBy            NVARCHAR(200) NULL,
+    CONSTRAINT PK_BillingAllocation PRIMARY KEY (BillingInvoiceLineId, ResourceId),
+    CONSTRAINT FK_BillingAllocation_Line FOREIGN KEY (BillingInvoiceLineId)
+        REFERENCES dbo.BillingInvoiceLine(BillingInvoiceLineId) ON DELETE CASCADE,
+    CONSTRAINT FK_BillingAllocation_Resource FOREIGN KEY (ResourceId)
+        REFERENCES dbo.Resource(ResourceId)
+);
+GO
+CREATE INDEX IX_BillingAllocation_Resource ON dbo.BillingAllocation(ResourceId);
+GO
+
+/* Baht per manday, one rate per year. Billing Manday = ROUND(Line Amount / rate of the posting
+   year, 3) — computed on read; a rate change rescales the allocations of locked lines. */
+CREATE TABLE dbo.BillingMandayRate (
+    [Year]    INT           NOT NULL CONSTRAINT PK_BillingMandayRate PRIMARY KEY,
+    Rate      DECIMAL(18,2) NOT NULL,
+    UpdatedAt DATETIME2(0)  NOT NULL
+        CONSTRAINT DF_BillingMandayRate_UpdatedAt DEFAULT (SYSUTCDATETIME()),
+    UpdatedBy NVARCHAR(200) NULL,
+    CONSTRAINT CK_BillingMandayRate_Rate CHECK (Rate > 0)
+);
+GO
+
+/* Local copy of every BC job's name and PM, refreshed on demand from the Billing screen —
+   invoices reference far more jobs than the Project master / D365 staging hold. */
+CREATE TABLE dbo.BcJobInfo (
+    JobNo          NVARCHAR(50)  NOT NULL CONSTRAINT PK_BcJobInfo PRIMARY KEY,
+    JobName        NVARCHAR(300) NULL,     -- BC projects.displayName
+    ProjectManager NVARCHAR(50)  NULL,     -- BC qerpProjectManager, e.g. Q63-036
+    PmEmail        NVARCHAR(200) NULL,     -- BC qerpPMEmail
+    CustomerName   NVARCHAR(300) NULL,
+    Status         NVARCHAR(50)  NULL,
+    FetchedAt      DATETIME2(0)  NOT NULL
+        CONSTRAINT DF_BcJobInfo_FetchedAt DEFAULT (SYSUTCDATETIME())
 );
 GO
 

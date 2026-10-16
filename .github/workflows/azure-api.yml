@@ -1,0 +1,59 @@
+# Publishes the .NET API to Azure App Service.
+#
+# Unlike the on-prem artifact, this one carries no SPA: the React build is deployed separately
+# to Static Web Apps, so nothing is copied into wwwroot here. The static-file middleware stays
+# in Program.cs for the on-prem single-origin deploy, it just has nothing to serve on Azure.
+#
+# No appsettings.Production.json is deployed either — it is gitignored, and on App Service the
+# same values come from application settings instead:
+#   ConnectionStrings__Qtm, Jwt__Key, Seed__AdminPassword, Cors__AllowedOrigins__0,
+#   Db__AllowRuntimeOverride=false, Db__ConnectTimeoutSeconds=30
+# Program.cs refuses to start in Production if Jwt__Key or Seed__AdminPassword are still the
+# development defaults, so a missing setting fails loudly at deploy time rather than quietly.
+#
+# Required secret:
+#   AZURE_API_PUBLISH_PROFILE   (App Service > Get publish profile)
+# Required variable:
+#   AZURE_API_APP_NAME          name of the Web App
+
+name: Deploy API (Azure App Service)
+
+on:
+  push:
+    branches: [main]
+    paths: ['backend/**', '.github/workflows/azure-api.yml']
+  workflow_dispatch:
+
+jobs:
+  build_and_deploy:
+    # Skipped (not failed) until Azure is set up: repo variable AZURE_DEPLOY_ENABLED = true.
+    if: vars.AZURE_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish
+        run: dotnet publish backend/Qtm.Api -c Release -o publish-api
+
+      - name: Deploy
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_API_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_API_PUBLISH_PROFILE }}
+          package: publish-api
+
+      - name: Health check
+        run: |
+          url="https://${{ vars.AZURE_API_APP_NAME }}.azurewebsites.net/health"
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 20 "$url" | grep -q '"ok"'; then
+              echo "healthy: $url"; exit 0
+            fi
+            echo "attempt $i: not healthy yet, retrying in 10s"; sleep 10
+          done
+          echo "::error::$url never returned a healthy response after the deploy."
+          exit 1

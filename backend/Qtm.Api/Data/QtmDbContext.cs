@@ -17,7 +17,15 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
-            optionsBuilder.UseSqlServer(dbSettings.GetConnectionString());
+            // Retry on transient faults. Azure SQL drops connections routinely (failover,
+            // reconfiguration, serverless resume) and without this every one of those surfaces
+            // to the user as a 500; it also absorbs LAN hiccups on-prem. Safe here because no
+            // code path opens its own transaction — the execution strategy would reject that.
+            optionsBuilder.UseSqlServer(dbSettings.GetConnectionString(),
+                o => o.EnableRetryOnFailure(
+                    maxRetryCount: 6,
+                    maxRetryDelay: TimeSpan.FromSeconds(15),
+                    errorNumbersToAdd: null));
     }
 
     public DbSet<Project> Projects => Set<Project>();
@@ -41,6 +49,11 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
     public DbSet<RevenueMonthSnapshot> RevenueMonthSnapshots => Set<RevenueMonthSnapshot>();
     public DbSet<RevenueMonthManualLine> RevenueMonthManualLines => Set<RevenueMonthManualLine>();
     public DbSet<RevenueMonthSetting> RevenueMonthSettings => Set<RevenueMonthSetting>();
+    public DbSet<RevenueMonthArchive> RevenueMonthArchives => Set<RevenueMonthArchive>();
+    public DbSet<BillingInvoiceLine> BillingInvoiceLines => Set<BillingInvoiceLine>();
+    public DbSet<BcJobInfo> BcJobInfos => Set<BcJobInfo>();
+    public DbSet<BillingAllocation> BillingAllocations => Set<BillingAllocation>();
+    public DbSet<BillingMandayRate> BillingMandayRates => Set<BillingMandayRate>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -288,6 +301,90 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.DefaultTargetAmount).HasColumnType("decimal(18,2)");
+        });
+
+        b.Entity<RevenueMonthArchive>(e =>
+        {
+            e.ToTable("RevenueMonthArchive");
+            e.HasKey(x => x.RevenueMonthArchiveId);
+            e.Property(x => x.ArchivedBy).HasMaxLength(200);
+            e.Property(x => x.Reason).HasMaxLength(300);
+            e.Property(x => x.TotalStd).HasColumnType("decimal(18,2)");
+            e.Property(x => x.TotalAct).HasColumnType("decimal(18,2)");
+            e.Property(x => x.TargetAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.PayloadJson).IsRequired();
+            e.HasIndex(x => new { x.RevenueMonthId, x.VersionNo }).IsUnique();
+            e.HasOne(x => x.Month)
+                .WithMany()
+                .HasForeignKey(x => x.RevenueMonthId);
+        });
+
+        b.Entity<BillingInvoiceLine>(e =>
+        {
+            e.ToTable("BillingInvoiceLine");
+            e.HasKey(x => x.BillingInvoiceLineId);
+            e.Property(x => x.DocumentNo).HasMaxLength(30);
+            e.Property(x => x.CustomerNo).HasMaxLength(30);
+            e.Property(x => x.CustomerName).HasMaxLength(300);
+            e.Property(x => x.CustomerSearchName).HasMaxLength(150);
+            e.Property(x => x.LineType).HasMaxLength(20);
+            e.Property(x => x.ItemNo).HasMaxLength(50);
+            e.Property(x => x.ItemCategoryCode).HasMaxLength(50);
+            e.Property(x => x.Description).HasMaxLength(250);
+            e.Property(x => x.Quantity).HasColumnType("decimal(18,4)");
+            e.Property(x => x.UnitOfMeasure).HasMaxLength(20);
+            e.Property(x => x.UnitPrice).HasColumnType("decimal(18,2)");
+            e.Property(x => x.LineDiscountPct).HasColumnType("decimal(9,4)");
+            e.Property(x => x.LineAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.AmountInclVat).HasColumnType("decimal(18,2)");
+            e.Property(x => x.BoiCode).HasMaxLength(20);
+            e.Property(x => x.ProjectNo).HasMaxLength(50);
+            e.Property(x => x.ProjectTaskNo).HasMaxLength(50);
+            e.Property(x => x.JobPlanningDescription).HasMaxLength(250);
+            e.Property(x => x.ConfirmedBy).HasMaxLength(200);
+            e.Property(x => x.DeletedBy).HasMaxLength(200);
+            e.Property(x => x.AllocLockedBy).HasMaxLength(200);
+            e.Property(x => x.OtherQuantity).HasColumnType("decimal(18,4)");
+            e.Property(x => x.OtherNote).HasMaxLength(200);
+            e.Property(x => x.SourceFileName).HasMaxLength(260);
+            e.Property(x => x.ImportedBy).HasMaxLength(200);
+            e.HasIndex(x => new { x.DocumentNo, x.LineSeq }).IsUnique();
+            e.HasIndex(x => x.PostingDate);
+            e.HasIndex(x => x.ProjectNo);
+        });
+
+        b.Entity<BillingAllocation>(e =>
+        {
+            e.ToTable("BillingAllocation");
+            e.HasKey(x => new { x.BillingInvoiceLineId, x.ResourceId });
+            e.Property(x => x.Quantity).HasColumnType("decimal(18,4)");
+            e.Property(x => x.UpdatedBy).HasMaxLength(200);
+            e.HasOne<BillingInvoiceLine>().WithMany()
+                .HasForeignKey(x => x.BillingInvoiceLineId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<ResourceItem>().WithMany()
+                .HasForeignKey(x => x.ResourceId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => x.ResourceId);
+        });
+
+        b.Entity<BillingMandayRate>(e =>
+        {
+            e.ToTable("BillingMandayRate");
+            e.HasKey(x => x.Year);
+            e.Property(x => x.Year).ValueGeneratedNever();
+            e.Property(x => x.Rate).HasColumnType("decimal(18,2)");
+            e.Property(x => x.UpdatedBy).HasMaxLength(200);
+        });
+
+        b.Entity<BcJobInfo>(e =>
+        {
+            e.ToTable("BcJobInfo");
+            e.HasKey(x => x.JobNo);
+            e.Property(x => x.JobNo).HasMaxLength(50);
+            e.Property(x => x.JobName).HasMaxLength(300);
+            e.Property(x => x.ProjectManager).HasMaxLength(50);
+            e.Property(x => x.PmEmail).HasMaxLength(200);
+            e.Property(x => x.CustomerName).HasMaxLength(300);
+            e.Property(x => x.Status).HasMaxLength(50);
         });
 
         b.Entity<RevenueMonthManualLine>(e =>

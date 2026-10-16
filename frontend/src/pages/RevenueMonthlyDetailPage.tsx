@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Link, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import type {
-  ImportResult, RevenueMonthDetail, RevenueMonthEstimate, RevenueMonthLine, RevenueMonthManualUpsert,
+  ImportResult, RevenueMonthArchive, RevenueMonthArchiveDetail, RevenueMonthDetail,
+  RevenueMonthEstimate, RevenueMonthLine, RevenueMonthManualUpsert,
 } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { money, periodLabel, RevenueStatusBadge } from './RevenueMonthlyListPage';
@@ -77,7 +78,8 @@ function ImportSlot({ label, hint, fileName, importedAt, jobCount, reportInfo, c
 
 export default function RevenueMonthlyDetailPage() {
   const { id } = useParams();
-  const { isManager } = useAuth();
+  const { isManager, hasRole } = useAuth();
+  const isAdmin = hasRole('Admin');
   const [data, setData] = useState<RevenueMonthDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,20 +101,92 @@ export default function RevenueMonthlyDetailPage() {
   const [editingTarget, setEditingTarget] = useState(false);
   const [onlyBacklog, setOnlyBacklog] = useState(false);   // Backlog card -> filter the table
   const [targetValue, setTargetValue] = useState('');
+  // Archive versions. `viewing` non-null means the whole screen is replaying a kept version
+  // instead of the live period — read-only, since an archive is frozen by design.
+  const [versions, setVersions] = useState<RevenueMonthArchive[]>([]);
+  const [viewing, setViewing] = useState<RevenueMonthArchiveDetail | null>(null);
+  const [archiveBusy, setArchiveBusy] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [archiveOpen, setArchiveOpen] = useState(false);     // "เก็บ Version" dialog
+  const [archiveReason, setArchiveReason] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      setData(await api.get<RevenueMonthDetail>(`/revenue-monthly/${id}`));
+    // The period is what the page is for; the version list is extra. Load them independently so
+    // a failing archive call (e.g. a server whose archive migration has not been run yet) leaves
+    // the period fully usable instead of taking the whole page down with it.
+    const [detail, list] = await Promise.allSettled([
+      api.get<RevenueMonthDetail>(`/revenue-monthly/${id}`),
+      api.get<RevenueMonthArchive[]>(`/revenue-monthly/${id}/archives`),
+    ]);
+
+    if (detail.status === 'fulfilled') {
+      setData(detail.value);
       setError(null);
-    } catch (err) {
+    } else {
+      const err = detail.reason;
       setError(err instanceof ApiError ? err.message : 'โหลดข้อมูลไม่สำเร็จ');
-    } finally {
-      setLoading(false);
     }
+
+    if (list.status === 'fulfilled') {
+      setVersions(list.value);
+      setArchiveError(null);
+    } else {
+      setVersions([]);
+      setArchiveError('โหลดรายการ Version ไม่สำเร็จ — ข้อมูลงวดด้านล่างยังใช้งานได้ตามปกติ'
+        + ' (ถ้าเพิ่ง deploy ให้ตรวจว่ารัน migrate-2026-09-25-0931.sql บนฐานข้อมูลแล้ว)');
+    }
+    setLoading(false);
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  /** Keeps the period as it reads right now as the next version. */
+  async function archiveNow(e: FormEvent) {
+    e.preventDefault();
+    setArchiveBusy(true);
+    setError(null);
+    try {
+      const v = await api.post<RevenueMonthArchive>(`/revenue-monthly/${id}/archives`,
+        { reason: archiveReason.trim() || null });
+      setVersions((prev) => [v, ...prev]);
+      setArchiveOpen(false);
+      setArchiveReason('');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'เก็บ Version ไม่สำเร็จ');
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
+
+  /** Switches the screen between the live period (null) and a kept version. */
+  async function showVersion(versionNo: number | null) {
+    if (versionNo === null) { setViewing(null); return; }
+    setArchiveBusy(true);
+    setError(null);
+    try {
+      setViewing(await api.get<RevenueMonthArchiveDetail>(`/revenue-monthly/${id}/archives/${versionNo}`));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'เปิด Version ไม่สำเร็จ');
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
+
+  async function removeVersion(versionNo: number) {
+    if (!confirm(`ลบ Version ${versionNo} ของงวดนี้? ลบแล้วกู้คืนไม่ได้`)) return;
+    setArchiveBusy(true);
+    setError(null);
+    try {
+      await api.del(`/revenue-monthly/${id}/archives/${versionNo}`);
+      setVersions((prev) => prev.filter((v) => v.versionNo !== versionNo));
+      if (viewing?.version.versionNo === versionNo) setViewing(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'ลบ Version ไม่สำเร็จ');
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
 
   async function importSide(side: Side, file: File) {
     setBusySide(side);
@@ -132,10 +206,13 @@ export default function RevenueMonthlyDetailPage() {
   // Until this month's snapshot is imported every imported row reads as 0% now, which would show a
   // large negative "revenue". The hand-keyed lines are the only ones that mean anything yet, so show
   // just those — adding a line before any import is a normal way to start a period.
+  // What the screen is showing: the live period, or a kept version being replayed.
+  const shown = viewing?.data ?? data;
+
   const lines = useMemo(() => {
-    const all = data?.lines ?? [];
-    return data?.month.currImportedAt ? all : all.filter((l) => l.isManual);
-  }, [data]);
+    const all = shown?.lines ?? [];
+    return shown?.month.currImportedAt ? all : all.filter((l) => l.isManual);
+  }, [shown]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -311,9 +388,11 @@ export default function RevenueMonthlyDetailPage() {
   }
 
   if (loading && !data) return <p className="muted">กำลังโหลด…</p>;
-  if (!data) return <p className="error-text">{error ?? 'ไม่พบงวดที่ระบุ'}</p>;
+  if (!data || !shown) return <p className="error-text">{error ?? 'ไม่พบงวดที่ระบุ'}</p>;
 
-  const m = data.month;
+  const m = shown.month;
+  // A kept version is frozen: nothing on screen may be edited while one is open.
+  const canEdit = isManager && !m.isConfirmed && !viewing;
   const prevMonth = m.periodMonth === 1
     ? { y: m.periodYear - 1, mo: 12 }
     : { y: m.periodYear, mo: m.periodMonth - 1 };
@@ -328,14 +407,22 @@ export default function RevenueMonthlyDetailPage() {
         </h1>
         <div className="head-actions">
           <RefreshButton onRefresh={load} />
-          <button className="btn btn--sm" onClick={doExport}>⬇ Export .xlsx</button>
-          {isManager && !m.isConfirmed && (
+          <button className="btn btn--sm" onClick={doExport} disabled={!!viewing}
+            title={viewing ? 'Export ได้เฉพาะข้อมูลปัจจุบัน' : undefined}>⬇ Export .xlsx</button>
+          {canEdit && (
             <button className="btn btn--sm" onClick={openManualAdd}
               title="เพิ่มบรรทัดเอง — ไว้คีย์ Est. รายได้ที่ยังไม่มีในรายงาน">
               ＋ เพิ่มบรรทัด
             </button>
           )}
-          {isManager && (m.isConfirmed
+          {isManager && !viewing && !archiveError && (
+            <button className="btn btn--sm" onClick={() => { setArchiveReason(''); setArchiveOpen(true); }}
+              disabled={archiveBusy}
+              title="เก็บข้อมูลทั้งงวด ณ ตอนนี้ไว้เป็น Version — เก็บแล้วแก้ไขไม่ได้">
+              🗄 เก็บ Version
+            </button>
+          )}
+          {isManager && !viewing && (m.isConfirmed
             ? <button className="btn btn--sm btn--navy" onClick={() => setConfirmed(false)}>Reopen</button>
             : <button className="btn btn--sm btn--primary" onClick={() => setConfirmed(true)}>✓ Confirm Revenue</button>)}
         </div>
@@ -351,18 +438,110 @@ export default function RevenueMonthlyDetailPage() {
 
       {error && <p className="error-text">{error}</p>}
 
+      {/* Archive versions. A version is a frozen copy of the whole period — opening one replays it
+          exactly as it was kept, and every edit control on the screen goes away while it is open. */}
+      {(versions.length > 0 || isManager || archiveError) && (
+        <div className={`rmon__archive card${viewing ? ' rmon__archive--viewing' : ''}`}>
+          <div className="rmon__archive-head">
+            <span className="rmon__archive-title">🗄 Archive Version</span>
+            {archiveError ? (
+              <span className="error-text">{archiveError}</span>
+            ) : versions.length === 0 ? (
+              <span className="muted">ยังไม่มี Version ที่เก็บไว้</span>
+            ) : (
+              <span className="muted">
+                เก็บไว้ {versions.length} Version · ล่าสุดคือ <b>Version {versions[0].versionNo}</b>
+                {' '}เมื่อ {fmtDateTime(versions[0].archivedAt)}
+                {versions[0].archivedBy ? ` โดย ${versions[0].archivedBy}` : ''}
+              </span>
+            )}
+            {versions.length > 0 && (
+              <select className="input rmon__archive-pick" disabled={archiveBusy}
+                value={viewing?.version.versionNo ?? ''}
+                onChange={(e) => showVersion(e.target.value === '' ? null : Number(e.target.value))}>
+                <option value="">ข้อมูลปัจจุบัน (แก้ไขได้)</option>
+                {versions.map((v) => (
+                  <option key={v.versionNo} value={v.versionNo}>
+                    Version {v.versionNo} · {fmtDateTime(v.archivedAt)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {viewing && (
+            <div className="rmon__archive-banner">
+              <span className="badge badge--purple">🔒 Version {viewing.version.versionNo}</span>
+              <span>
+                เก็บเมื่อ <b>{fmtDateTime(viewing.version.archivedAt)}</b>
+                {viewing.version.archivedBy ? ` โดย ${viewing.version.archivedBy}` : ''}
+                {viewing.version.isAuto ? ' (เก็บอัตโนมัติตอน Confirm)' : ''}
+                {viewing.version.wasConfirmed ? ' · ขณะนั้นงวดนี้ Confirm แล้ว' : ' · ขณะนั้นยังไม่ Confirm'}
+                {' '}— ข้อมูลทั้งหน้าด้านล่างเป็นของ Version นี้ <b>อ่านอย่างเดียว แก้ไขไม่ได้</b>
+              </span>
+              {viewing.version.reason && <span className="muted">หมายเหตุ: {viewing.version.reason}</span>}
+              <button className="btn btn--sm" onClick={() => showVersion(null)}>← กลับไปข้อมูลปัจจุบัน</button>
+            </div>
+          )}
+
+          {versions.length > 0 && (
+            <table className="table rmon__archive-table">
+              <thead>
+                <tr>
+                  <th>Version</th>
+                  <th>วัน-เวลาที่เก็บ</th>
+                  <th>ผู้เก็บ</th>
+                  <th className="num">Job</th>
+                  <th className="num">รายได้ (Act.)</th>
+                  <th className="num">รายได้ (Std.)</th>
+                  <th>หมายเหตุ</th>
+                  {isAdmin && <th />}
+                </tr>
+              </thead>
+              <tbody>
+                {versions.map((v) => (
+                  <tr key={v.versionNo}
+                    className={viewing?.version.versionNo === v.versionNo ? 'is-active' : undefined}>
+                    <td className="nowrap">
+                      <button type="button" className="rmon__archive-link" disabled={archiveBusy}
+                        onClick={() => showVersion(v.versionNo)}>
+                        Version {v.versionNo}
+                      </button>
+                      {v.isAuto && <span className="badge badge--blue rmon__tag">auto</span>}
+                      {v.wasConfirmed && <span className="badge badge--green rmon__tag">Confirmed</span>}
+                    </td>
+                    <td className="nowrap">{fmtDateTime(v.archivedAt)}</td>
+                    <td>{v.archivedBy ?? '—'}</td>
+                    <td className="num">{v.jobCount}</td>
+                    <td className="num">{money(v.totalAct ?? 0)}</td>
+                    <td className="num">{money(v.totalStd ?? 0)}</td>
+                    <td>{v.reason ?? '—'}</td>
+                    {isAdmin && (
+                      <td className="num">
+                        <button type="button" className="rmon__iconbtn" title="ลบ Version นี้"
+                          disabled={archiveBusy} onClick={() => removeVersion(v.versionNo)}>🗑</button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
       <div className="rmon__slots">
         <ImportSlot
           label="1) ข้อมูล ณ สิ้นเดือนก่อน"
           hint={`Standard Progress vs Actual Progress Summary ณ สิ้นเดือน ${prevMonth.mo}/${prevMonth.y}`}
           fileName={m.prevFileName} importedAt={m.prevImportedAt} jobCount={m.prevJobCount}
-          reportInfo={m.prevReportInfo} canImport={isManager && !m.isConfirmed} busy={busySide === 'prev'}
+          reportInfo={m.prevReportInfo} canImport={canEdit} busy={busySide === 'prev'}
           onPick={(f) => importSide('prev', f)} />
         <ImportSlot
           label="2) ข้อมูล ณ สิ้นเดือนนี้"
           hint={`Standard Progress vs Actual Progress Summary ณ สิ้นเดือน ${m.periodMonth}/${m.periodYear}`}
           fileName={m.currFileName} importedAt={m.currImportedAt} jobCount={m.currJobCount}
-          reportInfo={m.currReportInfo} canImport={isManager && !m.isConfirmed} busy={busySide === 'curr'}
+          reportInfo={m.currReportInfo} canImport={canEdit} busy={busySide === 'curr'}
           onPick={(f) => importSide('curr', f)} />
       </div>
 
@@ -481,7 +660,7 @@ export default function RevenueMonthlyDetailPage() {
         <div className="statcard statcard--navy">
           <div className="statcard__label">
             Target เดือนนี้
-            {isManager && !m.isConfirmed && (
+            {canEdit && (
               <button type="button" className="rmon__iconbtn" title="ตั้ง Target ของงวดนี้"
                 onClick={() => { setEditingTarget(true); setTargetValue(m.targetAmount == null ? '' : String(m.targetAmount)); }}>✏</button>
             )}
@@ -594,11 +773,11 @@ export default function RevenueMonthlyDetailPage() {
                       ) : (
                         <>
                           {pct(v.curr)}
-                          {isManager && !m.isConfirmed && !l.isManual && (
+                          {canEdit && !l.isManual && (
                             <button type="button" className="rmon__iconbtn" title="แก้ไข % เดือนนี้"
                               onClick={() => { setEditingJob(l.jobNo); setEditValue(String(v.curr)); }}>✏</button>
                           )}
-                          {edited && isManager && !m.isConfirmed && (
+                          {edited && canEdit && (
                             <button type="button" className="rmon__iconbtn" disabled={savingJob === l.jobNo}
                               title={`แก้จากค่าที่ import ${imported == null ? '(ไม่มีในไฟล์)' : pct(imported)}`
                                 + (l.overrideBy ? ` โดย ${l.overrideBy}` : '') + ' — กดเพื่อคืนค่าเดิม'}
@@ -614,7 +793,7 @@ export default function RevenueMonthlyDetailPage() {
                     <td className="num">{money(backlogOf(l, basis))}</td>
                     <td className="nowrap">
                       {l.isManual && <span className="badge badge--purple">เพิ่มเอง</span>}
-                      {l.isManual && isManager && !m.isConfirmed && (
+                      {l.isManual && canEdit && (
                         <>
                           <button type="button" className="rmon__iconbtn" title="แก้ไขบรรทัดนี้"
                             onClick={() => openManualEdit(l)}>✏</button>
@@ -648,6 +827,30 @@ export default function RevenueMonthlyDetailPage() {
           )}
         </table>
       </div>
+
+      {archiveOpen && (
+        <Modal title="เก็บ Version" onClose={() => setArchiveOpen(false)}>
+          <form onSubmit={archiveNow}>
+            <p className="muted" style={{ marginTop: 0 }}>
+              เก็บข้อมูล<b>ทั้งงวด ณ ตอนนี้</b> (ทุกบรรทัด ทั้งที่ import และคีย์เอง รวมยอดและ Target)
+              ไว้เป็น <b>Version {(versions[0]?.versionNo ?? 0) + 1}</b> —
+              เก็บแล้ว<b>แก้ไขไม่ได้</b> และจะไม่เปลี่ยนตามข้อมูลที่แก้ภายหลัง
+            </p>
+
+            <label className="field-label">หมายเหตุ (ไม่บังคับ)</label>
+            <input className="input" value={archiveReason} autoFocus
+              placeholder="เช่น ส่งงบให้บัญชีแล้ว"
+              onChange={(e) => setArchiveReason(e.target.value)} />
+
+            <div className="form-actions">
+              <button type="button" className="btn" onClick={() => setArchiveOpen(false)}>ยกเลิก</button>
+              <button type="submit" className="btn btn--primary" disabled={archiveBusy}>
+                {archiveBusy ? 'กำลังเก็บ…' : '🗄 เก็บ Version'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {manualForm && (
         <Modal title={manualId ? 'แก้ไขบรรทัดที่เพิ่มเอง' : 'เพิ่มบรรทัด (คีย์เอง)'} onClose={() => setManualForm(null)}>

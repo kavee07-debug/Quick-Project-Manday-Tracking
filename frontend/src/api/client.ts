@@ -1,7 +1,11 @@
 // Thin fetch wrapper. Reads the JWT from localStorage and attaches it to every call.
 // Base path is /api/v1 (Vite proxies /api -> backend on :4207).
 
-const BASE = '/api/v1';
+// Relative by default — same-origin on-prem (the API serves the SPA) and in dev (Vite proxy).
+// Set VITE_API_BASE_URL to an absolute origin when the SPA is hosted apart from the API,
+// e.g. Azure Static Web Apps + App Service. Baked in at build time.
+export const API_BASE = `${(import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '')}/api/v1`;
+const BASE = API_BASE;
 const TOKEN_KEY = 'qtm.token';
 
 export function getToken(): string | null {
@@ -61,8 +65,11 @@ function authHeader(): Record<string, string> {
 }
 
 // Downloads a file (e.g. xlsx export) with the JWT attached, then triggers a browser save.
-async function download(path: string, filename: string): Promise<void> {
-  const res = await fetch(`${BASE}${path}`, { headers: authHeader() });
+// With a body it POSTs it as JSON (for exports that take a selection, e.g. the filtered rows).
+async function download(path: string, filename: string, body?: unknown): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, body === undefined
+    ? { headers: authHeader() }
+    : { method: 'POST', headers: { ...authHeader(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (res.status === 401) {
     setToken(null);
     throw new UnauthorizedError(401, 'Session expired. Please sign in again.');

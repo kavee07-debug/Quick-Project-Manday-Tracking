@@ -21,6 +21,9 @@ export default function ConfigPage() {
 
   const [form, setForm] = useState<DbConfigUpsert>(blank);
   const [hasPassword, setHasPassword] = useState(false);
+  // Hosted installs (Azure) take the connection from host configuration — the page can still
+  // show and test a connection, but saving is refused by the API, so don't offer it.
+  const [readOnly, setReadOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [test, setTest] = useState<DbTestResult | null>(null);
@@ -47,6 +50,7 @@ export default function ConfigPage() {
         encrypt: c.encrypt,
       });
       setHasPassword(c.hasPassword);
+      setReadOnly(c.isReadOnly);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'โหลด config ไม่สำเร็จ');
@@ -104,10 +108,18 @@ export default function ConfigPage() {
         <h1 className="config__title">ตั้งค่าฐานข้อมูล (Config)</h1>
         {isAdmin && <RefreshButton onRefresh={load} />}
       </div>
-      <p className="muted config__hint">
-        ตั้งค่า connection ของ SQL Server. การบันทึกจะมีผลกับการเชื่อมต่อครั้งถัดไปทันที
-        (ไม่ต้องรีสตาร์ท). หลังเปลี่ยนไป server ใหม่ อย่าลืมรัน <code>db/schema.sql</code> บนเซิร์ฟเวอร์นั้นก่อน.
-      </p>
+      {readOnly ? (
+        <p className="muted config__hint">
+          การเชื่อมต่อฐานข้อมูลถูกกำหนดจาก <strong>App Service Configuration</strong> ของโฮสต์
+          (<code>ConnectionStrings__Qtm</code>) — หน้านี้ดูค่าปัจจุบันและทดสอบการเชื่อมต่อได้ แต่บันทึกไม่ได้.
+          ถ้าต้องการเปลี่ยน ให้แก้ที่ Azure Portal แล้ว restart แอป.
+        </p>
+      ) : (
+        <p className="muted config__hint">
+          ตั้งค่า connection ของ SQL Server. การบันทึกจะมีผลกับการเชื่อมต่อครั้งถัดไปทันที
+          (ไม่ต้องรีสตาร์ท). หลังเปลี่ยนไป server ใหม่ อย่าลืมรัน <code>db/schema.sql</code> บนเซิร์ฟเวอร์นั้นก่อน.
+        </p>
+      )}
 
       <form className="config__card card" onSubmit={save}>
         <label className="field-label">Server</label>
@@ -163,9 +175,11 @@ export default function ConfigPage() {
           <button type="button" className="btn" onClick={runTest} disabled={busy}>
             ทดสอบการเชื่อมต่อ
           </button>
-          <button type="submit" className="btn btn--primary" disabled={busy}>
-            บันทึก
-          </button>
+          {!readOnly && (
+            <button type="submit" className="btn btn--primary" disabled={busy}>
+              บันทึก
+            </button>
+          )}
         </div>
       </form>
     </div>

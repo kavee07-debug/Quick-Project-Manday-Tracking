@@ -1,0 +1,253 @@
+.billing {
+  &__title { margin: 0; font-size: var(--font-size-xl); }
+  &__hint { margin: 0 0 var(--space-4); font-size: var(--font-size-sm); }
+  &__ok { color: var(--color-success); margin: 0 0 var(--space-3); }
+  &__warn {
+    margin: 0 0 var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-left: 3px solid var(--color-adjust);
+    background: var(--color-surface);
+    font-size: var(--font-size-sm);
+  }
+
+  &__result {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+  }
+  &__empty { padding: var(--space-5); text-align: center; }
+
+  // ----- filters -----
+  &__filterbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-3);
+  }
+  &__label {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    margin-right: var(--space-1);
+  }
+  &__count { opacity: 0.7; margin-left: var(--space-1); }
+  &__sep {
+    width: 1px;
+    align-self: stretch;
+    min-height: 24px;
+    background: var(--color-border);
+    margin: 0 var(--space-2);
+  }
+  &__search { min-width: 320px; flex: 1 1 320px; max-width: 480px; }
+  &__field {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    .input { width: auto; }
+  }
+
+  &__kpi { margin: var(--space-2) 0 var(--space-4); }
+
+  // ----- bulk actions -----
+  &__bulk {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-3);
+    .muted { margin-right: auto; }
+  }
+
+  // ----- table -----
+  // A year runs to a few thousand lines — scroll inside the card, keep the header in view.
+  &__tablewrap {
+    max-height: 70vh;
+    overflow: auto;
+    padding: 0;
+  }
+  &__table {
+    // Pin the whole header (labels + filter boxes) as one block, so the filter row needs no
+    // hard-coded offset under the label row.
+    thead {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    th {
+      white-space: nowrap;
+      background: var(--color-surface);
+    }
+    tr.billing__filters th {
+      padding-top: var(--space-1);
+      padding-bottom: var(--space-2);
+      border-bottom: 1px solid var(--color-border);
+    }
+    tr.is-selected td { background: var(--color-primary-soft); }
+  }
+  &__ratetable { padding: 0; overflow-x: auto; max-width: 960px; }
+
+  // ----- Billing KPI Manday (resource × year) -----
+  &__kpitable {
+    padding: 0;
+    overflow-x: auto;
+    th { white-space: nowrap; }
+    tfoot td { white-space: nowrap; }
+  }
+  &__kpi-total { font-weight: var(--font-weight-bold); background: var(--color-primary-soft); }
+  &__kpi-rate {
+    margin-top: 2px;
+    font-size: var(--font-size-sm);
+    font-weight: normal;
+    color: var(--color-text-muted);
+    text-transform: none;
+  }
+  &__kpi-subtotal td {
+    font-weight: var(--font-weight-bold);
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+  }
+  &__kpi-grand td {
+    font-weight: var(--font-weight-bold);
+    border-top: 2px solid var(--color-border);
+  }
+  &__kpi-off td { color: var(--color-text-muted); }
+  &__kpi-flag { margin-left: var(--space-2); }
+
+  // ----- allocation state (Allocate screen) -----
+  // Complete reads green, locked reads grey; both also carry a coloured edge on the first cell so
+  // the state shows even where the matrix tint covers the row.
+  &__row--complete td { background: color-mix(in srgb, var(--color-success) 8%, var(--color-surface)); }
+  &__row--complete td:first-child { box-shadow: inset 4px 0 0 var(--color-success); }
+  &__row--locked td {
+    background: color-mix(in srgb, var(--color-text-muted) 10%, var(--color-surface));
+    color: var(--color-text-muted);
+  }
+  &__row--locked td:first-child { box-shadow: inset 4px 0 0 var(--color-navy); }
+  &__row--partial td:first-child { box-shadow: inset 4px 0 0 var(--color-warning); }
+  &__alloc-locked {
+    display: inline-block;
+    min-width: 84px;
+    text-align: right;
+    font-weight: var(--font-weight-bold);
+  }
+  &__badge-none {
+    background: transparent;
+    color: var(--color-text-muted);
+    box-shadow: inset 0 0 0 1px var(--color-border);
+  }
+  &__badge-locked { background: var(--color-navy); }
+  // "Other" (outside the resource master) — a rule separates it from the people columns.
+  &__other-start { border-left: 2px solid var(--color-border); }
+  &__other-note {
+    width: 160px;
+    padding: 2px var(--space-2);
+    &.is-saving { opacity: 0.6; }
+    &.is-error { border-color: var(--color-danger); }
+  }
+  &__norate {
+    color: var(--color-danger);
+    font-size: var(--font-size-sm);
+    white-space: nowrap;
+  }
+
+  // ----- top horizontal scrollbar (mirrors the table's own one at the bottom) -----
+  &__topscroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin-bottom: var(--space-1);
+    // Tall enough for the native scrollbar; the 1px inner strip just gives it something to scroll.
+    min-height: 14px;
+  }
+
+  // ----- allocation matrix (Allocate screen) -----
+  // Tinted so the per-person columns read as one block, apart from the line details.
+  &__matrix { background: var(--color-primary-soft); }
+  thead &__matrix, tfoot &__matrix { background: var(--color-primary-soft); }
+  &__matrix-total { font-weight: var(--font-weight-bold); }
+  &__res-head {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+  &__alloc-input {
+    width: 84px;
+    padding: 2px var(--space-2);
+    text-align: right;
+    &.is-saving { opacity: 0.6; }
+    &.is-error { border-color: var(--color-danger); }
+  }
+  // Totals row stays in view at the bottom of the scroll area for cross-checking.
+  &__table tfoot {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    td {
+      background: var(--color-surface);
+      border-top: 2px solid var(--color-border);
+      font-weight: var(--font-weight-bold);
+      white-space: nowrap;
+    }
+    td.billing__matrix { background: var(--color-primary-soft); }
+  }
+
+  &__colfilter {
+    width: 100%;
+    min-width: 72px;
+    padding: 2px var(--space-2);
+    font-size: var(--font-size-sm);
+    font-weight: normal;
+  }
+  &__more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border-top: 1px solid var(--color-border);
+  }
+  &__check { width: 36px; text-align: center; }
+  &__wide { min-width: 220px; }
+}
+
+// ----- Auto Allocate dialog (opened as modal--wide so the preview's old → new columns fit) -----
+.autoalloc {
+  &__modes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  &__mode {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: pointer;
+  }
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+  }
+  &__op { width: 140px; font-weight: var(--font-weight-bold); }
+  &__presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+  &__note { margin: var(--space-3) 0 0; }
+  &__preview {
+    margin-top: var(--space-4);
+    max-height: 260px;
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    th { white-space: nowrap; position: sticky; top: 0; background: var(--color-surface); }
+  }
+  &__summary { margin: var(--space-3) 0 0; font-size: var(--font-size-sm); }
+  .is-error { border-color: var(--color-danger); }
+}
