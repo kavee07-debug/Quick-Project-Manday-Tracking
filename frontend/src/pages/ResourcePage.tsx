@@ -1,13 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
-import { RESOURCE_POSITIONS, type Resource, type ResourceUpsert } from '../api/types';
+import { RESOURCE_POSITIONS, type PositionLevel, type Resource, type ResourceUpsert } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../components/Modal';
 import { PositionBadge } from '../components/PositionBadge';
 import { RefreshButton } from '../components/RefreshButton';
 import './ResourcePage.scss';
 
-const empty: ResourceUpsert = { code: '', name: '', position: '', isActive: true };
+const empty: ResourceUpsert = { code: '', name: '', position: '', isActive: true, positionLevelCode: '' };
 
 export default function ResourcePage() {
   const { isManager, hasRole } = useAuth();
@@ -15,6 +15,7 @@ export default function ResourcePage() {
   const isAdmin = hasRole('Admin');
   const [savingKpi, setSavingKpi] = useState<number | null>(null);
   const [resources, setResources] = useState<Resource[]>([]);
+  const [levels, setLevels] = useState<PositionLevel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +28,12 @@ export default function ResourcePage() {
     setLoading(true);
     try {
       // includeInactive so the master page shows everything
-      setResources(await api.get<Resource[]>('/resources?includeInactive=true'));
+      const [rs, lv] = await Promise.all([
+        api.get<Resource[]>('/resources?includeInactive=true'),
+        api.get<PositionLevel[]>('/position-levels'),
+      ]);
+      setResources(rs);
+      setLevels(lv);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'โหลดข้อมูลไม่สำเร็จ');
@@ -49,7 +55,8 @@ export default function ResourcePage() {
 
   function openEdit(r: Resource) {
     setEditing(r);
-    setForm({ code: r.code, name: r.name, position: r.position ?? '', isActive: r.isActive });
+    setForm({ code: r.code, name: r.name, position: r.position ?? '', isActive: r.isActive,
+      positionLevelCode: r.positionLevelCode ?? '' });
     setFormError(null);
     setShowForm(true);
   }
@@ -112,6 +119,7 @@ export default function ResourcePage() {
               <th>Code</th>
               <th>ชื่อ</th>
               <th>Position</th>
+              <th>Position Level</th>
               <th>สถานะ</th>
               {isAdmin && (
                 <th className="center" title="ติ๊กเพื่อนำ Resource นี้ไปคิด KPI Billing (เป็นคอลัมน์ในหน้า Billing Manday Allocate)">
@@ -123,15 +131,20 @@ export default function ResourcePage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={isAdmin ? 6 : 5} className="muted">กำลังโหลด…</td></tr>
+              <tr><td colSpan={isAdmin ? 7 : 6} className="muted">กำลังโหลด…</td></tr>
             ) : resources.length === 0 ? (
-              <tr><td colSpan={isAdmin ? 6 : 5} className="muted">ยังไม่มี resource</td></tr>
+              <tr><td colSpan={isAdmin ? 7 : 6} className="muted">ยังไม่มี resource</td></tr>
             ) : (
               resources.map((r) => (
                 <tr key={r.resourceId}>
                   <td>{r.code}</td>
                   <td>{r.name}</td>
                   <td><PositionBadge position={r.position} /></td>
+                  <td>
+                    {r.positionLevelCode
+                      ? <>{r.positionLevelName ?? r.positionLevelCode} <span className="muted">({r.positionLevelCode})</span></>
+                      : <span className="muted">—</span>}
+                  </td>
                   <td>
                     <span className={`badge ${r.isActive ? 'badge--actual' : 'badge--adjust'}`}>
                       {r.isActive ? 'Active' : 'Inactive'}
@@ -172,10 +185,26 @@ export default function ResourcePage() {
 
             <label className="field-label">Position</label>
             <select className="input" value={form.position ?? ''}
-              onChange={(e) => setForm({ ...form, position: e.target.value })}>
+              // A level belongs to one position, so a new position starts with no level.
+              onChange={(e) => setForm({ ...form, position: e.target.value, positionLevelCode: '' })}>
               <option value="">— ไม่ระบุ —</option>
               {RESOURCE_POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
+
+            <label className="field-label">Position Level</label>
+            {(() => {
+              const options = levels.filter((l) => l.position === form.position);
+              return (
+                <select className="input" value={form.positionLevelCode ?? ''} disabled={!form.position}
+                  onChange={(e) => setForm({ ...form, positionLevelCode: e.target.value })}>
+                  <option value="">
+                    {!form.position ? '— เลือก Position ก่อน —'
+                      : options.length === 0 ? `— ยังไม่มี Level ของ ${form.position} —` : '— ไม่ระบุ —'}
+                  </option>
+                  {options.map((l) => <option key={l.code} value={l.code}>{l.code} — {l.name}</option>)}
+                </select>
+              );
+            })()}
 
             <label className="resources__check">
               <input type="checkbox" checked={form.isActive}

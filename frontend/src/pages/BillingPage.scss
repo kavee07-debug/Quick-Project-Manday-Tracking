@@ -89,6 +89,10 @@
   }
   &__ratetable { padding: 0; overflow-x: auto; max-width: 960px; }
 
+  // ----- Master Position Level (rendered inside .billing) -----
+  .poslevel__year { min-width: 3.5em; text-align: center; }
+  .poslevel__target { width: 7em; text-align: right; padding: var(--space-1) var(--space-2); }
+
   // ----- Billing KPI Manday (resource × year) -----
   &__kpitable {
     padding: 0;
@@ -114,6 +118,15 @@
     border-top: 2px solid var(--color-border);
   }
   &__kpi-off td { color: var(--color-text-muted); }
+  // Each year is a group of Allocate | Target | Diff — a rule on its left keeps the groups apart.
+  &__kpi-ystart { border-left: 1px solid var(--color-border); }
+  &__kpi-sub {
+    font-size: var(--font-size-sm);
+    font-weight: normal;
+    color: var(--color-text-muted);
+    text-transform: none;
+  }
+  &__kpi-level { font-size: var(--font-size-sm); }
   &__kpi-flag { margin-left: var(--space-2); }
 
   // ----- allocation state (Allocate screen) -----

@@ -54,6 +54,8 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
     public DbSet<BcJobInfo> BcJobInfos => Set<BcJobInfo>();
     public DbSet<BillingAllocation> BillingAllocations => Set<BillingAllocation>();
     public DbSet<BillingMandayRate> BillingMandayRates => Set<BillingMandayRate>();
+    public DbSet<PositionLevel> PositionLevels => Set<PositionLevel>();
+    public DbSet<PositionLevelTarget> PositionLevelTargets => Set<PositionLevelTarget>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -122,7 +124,27 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.Property(x => x.Code).HasMaxLength(50);
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.Position).HasMaxLength(20);
+            e.Property(x => x.PositionLevelCode).HasMaxLength(20);
             e.HasIndex(x => x.Code).IsUnique();
+        });
+
+        b.Entity<PositionLevel>(e =>
+        {
+            e.ToTable("PositionLevel");
+            e.HasKey(x => new { x.Position, x.Code });
+            e.Property(x => x.Position).HasMaxLength(20);
+            e.Property(x => x.Code).HasMaxLength(20);
+            e.Property(x => x.Name).HasMaxLength(100);
+        });
+
+        b.Entity<PositionLevelTarget>(e =>
+        {
+            e.ToTable("PositionLevelTarget");
+            e.HasKey(x => new { x.Position, x.LevelCode, x.Year });
+            e.Property(x => x.Position).HasMaxLength(20);
+            e.Property(x => x.LevelCode).HasMaxLength(20);
+            e.Property(x => x.TargetManday).HasColumnType("decimal(9,3)");
+            e.Property(x => x.UpdatedBy).HasMaxLength(200);
         });
 
         b.Entity<MasterItem>(e =>

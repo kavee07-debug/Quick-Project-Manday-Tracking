@@ -555,14 +555,26 @@ public class BillingController(QtmDbContext db, ExcelService excel, D365BcClient
             .Where(r => r.IsBillingKpi || allocatedIds.Contains(r.ResourceId))
             .ToListAsync();
 
-        var years = lineYears.Union(cells.Select(c => c.Year)).Order().ToArray();
+        // Each person's target is their Position Level's target for the year (per person, not shared).
+        var levelNames = (await db.PositionLevels.ToListAsync())
+            .ToDictionary(l => (l.Position, l.Code), l => l.Name);
+        var targets = await db.PositionLevelTargets.ToListAsync();
+
+        // Years with a target show up too, so a year can be tracked before anything is billed in it.
+        var years = lineYears.Union(cells.Select(c => c.Year)).Union(targets.Select(t => t.Year)).Order().ToArray();
         var rows = people
             .OrderBy(r => PositionRank(r.Position)).ThenBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase)
             .Select(r =>
             {
                 var byYear = cells.Where(c => c.ResourceId == r.ResourceId).ToDictionary(c => c.Year, c => c.Qty);
+                var targetByYear = r.PositionLevelCode is null ? []
+                    : targets.Where(t => t.Position == r.Position && t.LevelCode == r.PositionLevelCode)
+                        .ToDictionary(t => t.Year, t => t.TargetManday);
                 return new BillingKpiRow(r.ResourceId, r.Code, r.Name, r.Position, r.IsBillingKpi,
-                    byYear, byYear.Values.Sum());
+                    byYear, byYear.Values.Sum(),
+                    r.PositionLevelCode,
+                    r.Position is string p && r.PositionLevelCode is string c ? levelNames.GetValueOrDefault((p, c)) : null,
+                    targetByYear);
             })
             .ToArray();
 

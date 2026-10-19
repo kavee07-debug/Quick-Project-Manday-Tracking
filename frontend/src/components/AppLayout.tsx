@@ -101,6 +101,16 @@ export function AppLayout() {
             </NavLink>
           )}
           {hasRole('Admin', 'ProjectManager') && (
+            <NavLink to="/position-levels" className={navItem} title="Master Position Level">
+              <PeopleIcon size={20} /> <span className="sidebar__label">Master Position Level</span>
+            </NavLink>
+          )}
+          {hasRole('Admin') && (
+            <NavLink to="/position-level-targets" className={navItem} title="Position Level Manday Target">
+              <ChartIcon size={20} /> <span className="sidebar__label">Position Level Manday Target</span>
+            </NavLink>
+          )}
+          {hasRole('Admin', 'ProjectManager') && (
             <NavLink to="/master-items" className={navItem} title="Master Item">
               <BoxIcon size={20} /> <span className="sidebar__label">Master Item</span>
             </NavLink>

@@ -16,10 +16,29 @@ public class ResourcesController(QtmDbContext db) : ControllerBase
 {
     private static readonly string[] ValidPositions = ["Dev", "SA", "PM"];
 
-    private static ResourceDto ToDto(ResourceItem r) =>
-        new(r.ResourceId, r.Code, r.Name, r.Position, r.IsActive, r.IsBillingKpi);
+    private async Task<ResourceDto> ToDtoAsync(ResourceItem r) => ToDto(r, await LevelNamesAsync());
+
+    private static ResourceDto ToDto(ResourceItem r, Dictionary<(string, string), string> levelNames) =>
+        new(r.ResourceId, r.Code, r.Name, r.Position, r.IsActive, r.IsBillingKpi, r.PositionLevelCode,
+            r.Position is string p && r.PositionLevelCode is string c ? levelNames.GetValueOrDefault((p, c)) : null);
+
+    private async Task<Dictionary<(string, string), string>> LevelNamesAsync() =>
+        (await db.PositionLevels.ToListAsync()).ToDictionary(l => (l.Position, l.Code), l => l.Name);
 
     private static string? NormalizePosition(string? p) => string.IsNullOrWhiteSpace(p) ? null : p.Trim();
+
+    /// <summary>
+    /// The level to store: null when none is picked or there is no position; otherwise it must be a
+    /// level of that position (the DB's composite FK enforces the same). Returns an error message.
+    /// </summary>
+    private async Task<(string? Level, string? Error)> ResolveLevelAsync(string? position, string? level)
+    {
+        level = string.IsNullOrWhiteSpace(level) ? null : level.Trim();
+        if (level is null || position is null) return (null, null);
+        return await db.PositionLevels.AnyAsync(l => l.Position == position && l.Code == level)
+            ? (level, null)
+            : (null, $"Position Level '{level}' ไม่มีใน {position}");
+    }
 
     /// <summary>Active resources by default (for dropdowns); pass includeInactive=true for the master page.</summary>
     [HttpGet]
@@ -28,14 +47,15 @@ public class ResourcesController(QtmDbContext db) : ControllerBase
         var q = db.Resources.AsQueryable();
         if (!includeInactive) q = q.Where(r => r.IsActive);
         var items = await q.OrderBy(r => r.Name).ToListAsync();
-        return Ok(items.Select(ToDto));
+        var names = await LevelNamesAsync();
+        return Ok(items.Select(r => ToDto(r, names)));
     }
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<ResourceDto>> Get(int id)
     {
         var r = await db.Resources.FindAsync(id);
-        return r is null ? NotFound() : Ok(ToDto(r));
+        return r is null ? NotFound() : Ok(await ToDtoAsync(r));
     }
 
     [HttpPost]
@@ -49,11 +69,17 @@ public class ResourcesController(QtmDbContext db) : ControllerBase
             return BadRequest(new { message = "Position ต้องเป็น Dev/SA/PM" });
         if (await db.Resources.AnyAsync(r => r.Code == req.Code))
             return Conflict(new { message = $"Resource code '{req.Code}' มีอยู่แล้ว" });
+        var (level, levelError) = await ResolveLevelAsync(position, req.PositionLevelCode);
+        if (levelError is not null) return BadRequest(new { message = levelError });
 
-        var r = new ResourceItem { Code = req.Code.Trim(), Name = req.Name.Trim(), Position = position, IsActive = req.IsActive };
+        var r = new ResourceItem
+        {
+            Code = req.Code.Trim(), Name = req.Name.Trim(), Position = position, PositionLevelCode = level,
+            IsActive = req.IsActive,
+        };
         db.Resources.Add(r);
         await db.SaveChangesAsync();
-        return CreatedAtAction(nameof(Get), new { id = r.ResourceId }, ToDto(r));
+        return CreatedAtAction(nameof(Get), new { id = r.ResourceId }, await ToDtoAsync(r));
     }
 
     [HttpPut("{id:int}")]
@@ -69,13 +95,16 @@ public class ResourcesController(QtmDbContext db) : ControllerBase
             return BadRequest(new { message = "Position ต้องเป็น Dev/SA/PM" });
         if (req.Code != r.Code && await db.Resources.AnyAsync(x => x.Code == req.Code))
             return Conflict(new { message = $"Resource code '{req.Code}' มีอยู่แล้ว" });
+        var (level, levelError) = await ResolveLevelAsync(position, req.PositionLevelCode);
+        if (levelError is not null) return BadRequest(new { message = levelError });
 
         r.Code = req.Code.Trim();
         r.Name = req.Name.Trim();
         r.Position = position;
+        r.PositionLevelCode = level;
         r.IsActive = req.IsActive;
         await db.SaveChangesAsync();
-        return Ok(ToDto(r));
+        return Ok(await ToDtoAsync(r));
     }
 
     /// <summary>
@@ -91,7 +120,7 @@ public class ResourcesController(QtmDbContext db) : ControllerBase
         if (r is null) return NotFound();
         r.IsBillingKpi = req.IsBillingKpi;
         await db.SaveChangesAsync();
-        return Ok(ToDto(r));
+        return Ok(await ToDtoAsync(r));
     }
 
     [HttpDelete("{id:int}")]

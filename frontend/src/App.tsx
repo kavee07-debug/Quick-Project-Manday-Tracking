@@ -25,6 +25,8 @@ import ConfigPage from './pages/ConfigPage';
 import BillingLinesPage from './pages/BillingLinesPage';
 import BillingKpiPage from './pages/BillingKpiPage';
 import BillingRatesPage from './pages/BillingRatesPage';
+import PositionLevelPage from './pages/PositionLevelPage';
+import PositionLevelTargetPage from './pages/PositionLevelTargetPage';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { session } = useAuth();
@@ -56,6 +58,8 @@ export default function App() {
         <Route path="/meeting-record" element={<MeetingListPage />} />
         <Route path="/meeting-record/:id" element={<MeetingDetailPage />} />
         <Route path="/resources" element={<ResourcePage />} />
+        <Route path="/position-levels" element={<PositionLevelPage />} />
+        <Route path="/position-level-targets" element={<PositionLevelTargetPage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/master-items" element={<MasterItemsPage />} />
         <Route path="/progress-update" element={<ProgressUpdatePage />} />

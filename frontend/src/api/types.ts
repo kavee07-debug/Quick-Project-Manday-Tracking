@@ -159,10 +159,22 @@ export interface Resource {
   isActive: boolean;
   /** Counts toward the Billing KPI — a column of the Billing Manday Allocate matrix. */
   isBillingKpi: boolean;
+  /** Level within the position (Master Position Level). */
+  positionLevelCode?: string | null;
+  positionLevelName?: string | null;
 }
 
 // isBillingKpi has its own endpoint (PUT /resources/{id}/billing-kpi), so the edit form can't clear it.
-export type ResourceUpsert = Pick<Resource, 'code' | 'name' | 'position' | 'isActive'>;
+export type ResourceUpsert = Pick<Resource, 'code' | 'name' | 'position' | 'isActive' | 'positionLevelCode'>;
+
+// ---- Position Level master (+ manday target per level per year) ----
+export interface PositionLevel {
+  position: string;                    // Dev | SA | PM
+  code: string;
+  name: string;
+  resources: number;                   // resources on this level
+  targets: Record<string, number>;     // year -> manday target per person
+}
 
 // ---- Master Item (synced from D365BC) ----
 export interface MasterItem {
@@ -565,6 +577,9 @@ export interface BillingKpiRow {
   isBillingKpi: boolean;                                // false = un-ticked but still has allocations
   byYear: Record<string, number>;
   total: number;
+  levelCode?: string | null;
+  levelName?: string | null;
+  targetByYear: Record<string, number>;                 // the level's manday target; absent = none set
 }
 export interface BillingKpi {
   years: number[];

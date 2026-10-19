@@ -142,7 +142,9 @@ public record BillingAllocationRequest(decimal? Quantity);   // null / 0 clears 
 // IsBillingKpi=false rows only appear when someone was un-ticked after work was allocated to them,
 // so their manday never silently drops out of the totals.
 public record BillingKpiRow(int ResourceId, string Code, string Name, string? Position, bool IsBillingKpi,
-    Dictionary<int, decimal> ByYear, decimal Total);
+    Dictionary<int, decimal> ByYear, decimal Total,
+    string? LevelCode, string? LevelName,
+    Dictionary<int, decimal> TargetByYear);   // the level's target per year (years without one are absent)
 // MandayByYear = sum of Billing Manday (Line Amount / rate) of confirmed lines — what allocation
 // should add up to. MissingRateYears = years with confirmed lines but no rate set up yet.
 // OtherByYear = manday allocated outside the resource master; already included in AllocatedByYear.
@@ -171,9 +173,17 @@ public record UserUpsert(string Email, string DisplayName, bool IsActive, string
 
 // ---- Resource ----
 public record ResourceDto(int ResourceId, string Code, string Name, string? Position, bool IsActive,
-    bool IsBillingKpi);
+    bool IsBillingKpi, string? PositionLevelCode, string? PositionLevelName);
 public record ResourceBillingKpiRequest(bool IsBillingKpi);
-public record ResourceUpsert(string Code, string Name, string? Position, bool IsActive);
+public record ResourceUpsert(string Code, string Name, string? Position, bool IsActive,
+    string? PositionLevelCode = null);   // must be a level of Position; null = no level
+
+// ---- Position Level master + Manday Target per level per year ----
+// Targets: year -> target manday per person at this level. Resources: how many use the level.
+public record PositionLevelDto(string Position, string Code, string Name, int Resources,
+    Dictionary<int, decimal> Targets);
+public record PositionLevelUpsert(string Position, string Code, string Name);
+public record PositionLevelTargetRequest(decimal? TargetManday);   // null = clear the year's target
 
 // ---- Master Item (synced from D365BC) ----
 public record MasterItemDto(int ItemId, string Number, string DisplayName, string? ItemCategoryCode, DateTime? UpdatedAt);

@@ -38,7 +38,9 @@ IF OBJECT_ID(N'dbo.MandayEntry', N'U')  IS NOT NULL DROP TABLE dbo.MandayEntry;
 IF OBJECT_ID(N'dbo.Task', N'U')         IS NOT NULL DROP TABLE dbo.Task;
 IF OBJECT_ID(N'dbo.Project', N'U')      IS NOT NULL DROP TABLE dbo.Project;   -- FK -> Customer, drop before Customer
 IF OBJECT_ID(N'dbo.Customer', N'U')     IS NOT NULL DROP TABLE dbo.Customer;
-IF OBJECT_ID(N'dbo.Resource', N'U')     IS NOT NULL DROP TABLE dbo.Resource;
+IF OBJECT_ID(N'dbo.PositionLevelTarget', N'U') IS NOT NULL DROP TABLE dbo.PositionLevelTarget;  -- FK -> PositionLevel
+IF OBJECT_ID(N'dbo.Resource', N'U')     IS NOT NULL DROP TABLE dbo.Resource;   -- FK -> PositionLevel
+IF OBJECT_ID(N'dbo.PositionLevel', N'U') IS NOT NULL DROP TABLE dbo.PositionLevel;
 IF OBJECT_ID(N'dbo.MasterItem', N'U')   IS NOT NULL DROP TABLE dbo.MasterItem;
 IF OBJECT_ID(N'dbo.UserRole', N'U')     IS NOT NULL DROP TABLE dbo.UserRole;
 IF OBJECT_ID(N'dbo.[Role]', N'U')       IS NOT NULL DROP TABLE dbo.[Role];
@@ -84,6 +86,33 @@ CREATE TABLE dbo.UserRole (
 GO
 
 /* ============================================================
+   Position Level master (levels within each Position) + manday target per level per year
+   ============================================================ */
+CREATE TABLE dbo.PositionLevel (
+    Position NVARCHAR(20)  NOT NULL,     -- Dev | SA | PM
+    Code     NVARCHAR(20)  NOT NULL,     -- e.g. JR, SR, LEAD
+    Name     NVARCHAR(100) NOT NULL,     -- e.g. Senior SA
+    CONSTRAINT PK_PositionLevel PRIMARY KEY (Position, Code),
+    CONSTRAINT CK_PositionLevel_Position CHECK (Position IN (N'Dev', N'SA', N'PM'))
+);
+GO
+
+CREATE TABLE dbo.PositionLevelTarget (
+    Position     NVARCHAR(20)  NOT NULL,
+    LevelCode    NVARCHAR(20)  NOT NULL,
+    [Year]       INT           NOT NULL,
+    TargetManday DECIMAL(9,3)  NOT NULL,   -- manday target per person at this level (Billing KPI)
+    UpdatedAt    DATETIME2(0)  NOT NULL
+        CONSTRAINT DF_PositionLevelTarget_UpdatedAt DEFAULT (SYSUTCDATETIME()),
+    UpdatedBy    NVARCHAR(200) NULL,
+    CONSTRAINT PK_PositionLevelTarget PRIMARY KEY (Position, LevelCode, [Year]),
+    CONSTRAINT FK_PositionLevelTarget_Level FOREIGN KEY (Position, LevelCode)
+        REFERENCES dbo.PositionLevel(Position, Code) ON DELETE CASCADE,
+    CONSTRAINT CK_PositionLevelTarget_Target CHECK (TargetManday >= 0)
+);
+GO
+
+/* ============================================================
    Resource master (people who consume mandays)
    ============================================================ */
 CREATE TABLE dbo.Resource (
@@ -91,10 +120,13 @@ CREATE TABLE dbo.Resource (
     Code          NVARCHAR(50) NOT NULL,      -- short code, e.g. KAVEE
     Name          NVARCHAR(200) NOT NULL,     -- display name, e.g. Kavee
     Position      NVARCHAR(20) NULL,          -- Dev | SA | PM
+    PositionLevelCode NVARCHAR(20) NULL,      -- level within Position (dbo.PositionLevel)
     IsActive      BIT NOT NULL CONSTRAINT DF_Resource_IsActive DEFAULT (1),
     IsBillingKpi  BIT NOT NULL CONSTRAINT DF_Resource_IsBillingKpi DEFAULT (0),  -- counts toward Billing KPI
     CONSTRAINT UQ_Resource_Code UNIQUE (Code),
-    CONSTRAINT CK_Resource_Position CHECK (Position IS NULL OR Position IN (N'Dev', N'SA', N'PM'))
+    CONSTRAINT CK_Resource_Position CHECK (Position IS NULL OR Position IN (N'Dev', N'SA', N'PM')),
+    CONSTRAINT FK_Resource_PositionLevel FOREIGN KEY (Position, PositionLevelCode)
+        REFERENCES dbo.PositionLevel(Position, Code)
 );
 GO
 
