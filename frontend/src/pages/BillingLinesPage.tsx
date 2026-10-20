@@ -524,6 +524,7 @@ export default function BillingLinesPage({ mode }: { mode: BillingMode }) {
     { key: 'doc', label: 'Document No.', value: (r) => r.documentNo, className: 'nowrap' },
     { key: 'date', label: 'Posting Date', value: (r) => fmtDate(r.postingDate), className: 'nowrap' },
     { key: 'job', label: 'Job No.', value: (r) => r.projectNo, className: 'nowrap' },
+    { key: 'task', label: 'Project Task', value: (r) => r.projectTaskNo, className: 'nowrap' },
     {
       key: 'jobName', label: 'ชื่อ Job', value: (r) => r.jobName, className: 'billing__wide',
       render: (r) => r.jobName ?? (r.projectNo ? <span className="muted">ไม่พบในระบบ</span> : '—'),
@@ -571,7 +572,7 @@ export default function BillingLinesPage({ mode }: { mode: BillingMode }) {
       if (allocFilter && allocStatusOf(r) !== allocFilter) return false;
       for (const c of active) if (!matches(c, r, colFilters[c.key])) return false;
       if (q) {
-        const hay = [r.documentNo, r.projectNo, r.jobName, r.projectManager, r.customerName,
+        const hay = [r.documentNo, r.projectNo, r.projectTaskNo, r.jobName, r.projectManager, r.customerName,
           r.customerSearchName, r.itemNo, r.description].join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }

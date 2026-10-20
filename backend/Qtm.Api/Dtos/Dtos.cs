@@ -13,7 +13,8 @@ public record ProjectDto(int ProjectId, string Code, string Name, string? Descri
     int? CustomerId, string? CustomerCode, string? CustomerName,
     string? Type, string Status, decimal? Progress,
     decimal? Revenue, string? TimesheetMapping, string? TrainingDate, DateOnly? StartDate, DateOnly? EndDate,
-    decimal TotalBudget, decimal TotalAdjust, decimal TotalActual, decimal Remaining);
+    decimal TotalBudget, decimal TotalAdjust, decimal TotalActual, decimal Remaining,
+    decimal TotalBilling = 0);   // sum of the Billing estimate on the project's Budget rows
 public record ProjectUpsert(string Code, string Name, string? Description, int? CustomerId,
     string? Type, string Status, decimal? Progress,
     decimal? Revenue, string? TimesheetMapping, string? TrainingDate, DateOnly? StartDate, DateOnly? EndDate);
@@ -25,9 +26,10 @@ public record TaskUpsert(string Name, string? Description, string Status, int So
 // ---- Manday ----
 public record MandayEntryDto(int MandayEntryId, int TaskId, string EntryType, int? ResourceId,
     string? ResourceName, string? ResourcePosition, decimal Manday, DateOnly? EntryDate,
-    DateOnly? StartDate, DateOnly? EndDate, string? Note);
+    DateOnly? StartDate, DateOnly? EndDate, string? Note, decimal? BillingManday);
+// BillingManday: Budget rows only (estimated manday to be billed, up to 3 decimals); ignored otherwise.
 public record MandayUpsert(string EntryType, int? ResourceId, decimal Manday, DateOnly? EntryDate,
-    DateOnly? StartDate, DateOnly? EndDate, string? Note);
+    DateOnly? StartDate, DateOnly? EndDate, string? Note, decimal? BillingManday = null);
 
 // ---- Meeting Record (weekly project-status meeting) ----
 public record MeetingRecordDto(int MeetingId, DateOnly MeetingDate, string Topic, string? Notes,

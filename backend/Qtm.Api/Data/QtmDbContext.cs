@@ -106,6 +106,7 @@ public class QtmDbContext(DbContextOptions<QtmDbContext> options, DbSettingsProv
             e.HasKey(x => x.MandayEntryId);
             e.Property(x => x.EntryType).HasMaxLength(10);
             e.Property(x => x.Manday).HasColumnType("decimal(11,4)");
+            e.Property(x => x.BillingManday).HasColumnType("decimal(9,3)");
             e.Property(x => x.Note).HasMaxLength(500);
             e.Property(x => x.SourceSystemId).HasMaxLength(100);
             e.HasIndex(x => x.SourceSystemId);

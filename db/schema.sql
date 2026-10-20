@@ -211,6 +211,7 @@ CREATE TABLE dbo.MandayEntry (
     EntryType     NVARCHAR(10) NOT NULL,
     ResourceId    INT NULL,                   -- nullable: Adjust rows may not map to a person
     Manday        DECIMAL(11,4) NOT NULL,     -- supports half-days e.g. 1.5, and finer MD from timesheets (0.375)
+    BillingManday DECIMAL(9,3) NULL,          -- Budget rows only: estimated manday to be billed for this person/task
     EntryDate     DATE NULL,
     StartDate     DATE NULL,                  -- planned/actual start
     EndDate       DATE NULL,                  -- defaults to StartDate, editable
@@ -222,7 +223,8 @@ CREATE TABLE dbo.MandayEntry (
     CONSTRAINT FK_Manday_Task     FOREIGN KEY (TaskId)     REFERENCES dbo.Task(TaskId) ON DELETE CASCADE,
     CONSTRAINT FK_Manday_Resource FOREIGN KEY (ResourceId) REFERENCES dbo.Resource(ResourceId),
     CONSTRAINT CK_Manday_Type     CHECK (EntryType IN (N'Budget', N'Actual', N'Adjust')),
-    CONSTRAINT CK_Manday_Value    CHECK (Manday >= 0)
+    CONSTRAINT CK_Manday_Value    CHECK (Manday >= 0),
+    CONSTRAINT CK_Manday_Billing  CHECK (BillingManday IS NULL OR (EntryType = N'Budget' AND BillingManday >= 0))
 );
 GO
 

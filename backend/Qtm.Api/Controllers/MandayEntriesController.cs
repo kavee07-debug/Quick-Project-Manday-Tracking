@@ -17,7 +17,10 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
 
     private static MandayEntryDto ToDto(MandayEntry m) =>
         new(m.MandayEntryId, m.TaskId, m.EntryType, m.ResourceId, m.Resource?.Name, m.Resource?.Position,
-            m.Manday, m.EntryDate, m.StartDate, m.EndDate, m.Note);
+            m.Manday, m.EntryDate, m.StartDate, m.EndDate, m.Note, m.BillingManday);
+
+    // Billing is an estimate on Budget rows only; any other type never carries one.
+    private static decimal? BillingOf(MandayUpsert req) => req.EntryType == "Budget" ? req.BillingManday : null;
 
     [HttpGet("tasks/{taskId:int}/mandays")]
     public async Task<ActionResult<IEnumerable<MandayEntryDto>>> List(int taskId)
@@ -56,6 +59,7 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
             EntryType = req.EntryType,
             ResourceId = req.ResourceId,
             Manday = req.Manday,
+            BillingManday = BillingOf(req),
             EntryDate = req.EntryDate,
             StartDate = req.StartDate,
             EndDate = req.EndDate,
@@ -81,6 +85,7 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
         m.EntryType = req.EntryType;
         m.ResourceId = req.ResourceId;
         m.Manday = req.Manday;
+        m.BillingManday = BillingOf(req);
         m.EntryDate = req.EntryDate;
         m.StartDate = req.StartDate;
         m.EndDate = req.EndDate;
@@ -118,6 +123,8 @@ public class MandayEntriesController(QtmDbContext db) : ControllerBase
         }
         if (req.Manday < 0)
             return BadRequest(new { message = "Manday must be zero or greater." });
+        if (BillingOf(req) is decimal billing && (billing < 0 || billing > 999999 || decimal.Round(billing, 3) != billing))
+            return BadRequest(new { message = "Billing ต้องไม่ติดลบ และมีทศนิยมได้ไม่เกิน 3 ตำแหน่ง" });
         if (req.StartDate is DateOnly sd && req.EndDate is DateOnly ed && ed < sd)
             return BadRequest(new { message = "End Date ต้องไม่ก่อน Start Date." });
         if (req.ResourceId is int rid && !await db.Resources.AnyAsync(r => r.ResourceId == rid))

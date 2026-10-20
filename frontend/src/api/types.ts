@@ -51,6 +51,8 @@ export interface Project {
   totalAdjust: number;
   totalActual: number;
   remaining: number;
+  /** Sum of the Billing estimate on the project's Budget rows. */
+  totalBilling: number;
 }
 
 // Upsert excludes id, joined customer fields, and the read-only rollups.
@@ -63,6 +65,7 @@ export type ProjectUpsert = Omit<
   | 'totalAdjust'
   | 'totalActual'
   | 'remaining'
+  | 'totalBilling'
 >;
 
 export interface TaskItem {
@@ -92,11 +95,13 @@ export interface MandayEntry {
   startDate?: string | null;
   endDate?: string | null;
   note?: string | null;
+  /** Budget rows only: estimated manday this person will be billed for on the task (≤ 3 decimals). */
+  billingManday?: number | null;
 }
 
 export type MandayUpsert = Pick<
   MandayEntry,
-  'entryType' | 'resourceId' | 'manday' | 'entryDate' | 'startDate' | 'endDate' | 'note'
+  'entryType' | 'resourceId' | 'manday' | 'entryDate' | 'startDate' | 'endDate' | 'note' | 'billingManday'
 >;
 
 // ---- Meeting Record (weekly project-status meeting) ----

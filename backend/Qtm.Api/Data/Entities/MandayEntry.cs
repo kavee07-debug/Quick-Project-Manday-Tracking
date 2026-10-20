@@ -8,6 +8,7 @@ public class MandayEntry
     public string EntryType { get; set; } = string.Empty;  // Budget | Actual | Adjust
     public int? ResourceId { get; set; }                   // nullable: Adjust rows may not map to a person
     public decimal Manday { get; set; }                    // supports half-days e.g. 1.5
+    public decimal? BillingManday { get; set; }            // Budget rows only: estimated manday to be billed (3 dp)
     public DateOnly? EntryDate { get; set; }
     public DateOnly? StartDate { get; set; }               // planned/actual start
     public DateOnly? EndDate { get; set; }                 // defaults to StartDate, editable

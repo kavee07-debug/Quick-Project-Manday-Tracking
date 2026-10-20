@@ -18,7 +18,7 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
 
     // Rolls the per-task view rows up to project level.
     // Remaining = (Sum Budget + Sum Adjust) - Sum Actual.
-    private static ProjectDto ToDto(Project p, IEnumerable<TaskMandaySummary> sums)
+    private static ProjectDto ToDto(Project p, IEnumerable<TaskMandaySummary> sums, decimal billing = 0)
     {
         var budget = sums.Sum(s => s.TotalBudget);
         var adjust = sums.Sum(s => s.TotalAdjust);
@@ -26,7 +26,18 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
         return new ProjectDto(p.ProjectId, p.Code, p.Name, p.Description,
             p.CustomerId, p.Customer?.Code, p.Customer?.Name,
             p.Type, p.Status, p.Progress,
-            p.Revenue, p.TimesheetMapping, p.TrainingDate, p.StartDate, p.EndDate, budget, adjust, actual, (budget + adjust) - actual);
+            p.Revenue, p.TimesheetMapping, p.TrainingDate, p.StartDate, p.EndDate, budget, adjust, actual, (budget + adjust) - actual,
+            billing);
+    }
+
+    /// <summary>Sum Billing per project: the Billing estimate on Budget rows (Estimate &amp; Actual).</summary>
+    private async Task<Dictionary<int, decimal>> BillingByProjectAsync(int? projectId = null)
+    {
+        var q = db.MandayEntries.Where(m => m.EntryType == "Budget" && m.BillingManday != null);
+        if (projectId is int id) q = q.Where(m => m.Task!.ProjectId == id);
+        return await q.GroupBy(m => m.Task!.ProjectId)
+            .Select(g => new { ProjectId = g.Key, Billing = g.Sum(m => m.BillingManday!.Value) })
+            .ToDictionaryAsync(x => x.ProjectId, x => x.Billing);
     }
 
     private static ActionResult? ValidateChoices(ProjectUpsert req, ControllerBase c)
@@ -55,7 +66,8 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
         var sums = (await db.TaskMandaySummaries.ToListAsync())
             .GroupBy(s => s.ProjectId)
             .ToDictionary(g => g.Key, g => g.ToList());
-        return Ok(items.Select(p => ToDto(p, sums.GetValueOrDefault(p.ProjectId, []))));
+        var billing = await BillingByProjectAsync();
+        return Ok(items.Select(p => ToDto(p, sums.GetValueOrDefault(p.ProjectId, []), billing.GetValueOrDefault(p.ProjectId))));
     }
 
     [HttpGet("{id:int}")]
@@ -64,7 +76,7 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
         var p = await db.Projects.Include(x => x.Customer).FirstOrDefaultAsync(x => x.ProjectId == id);
         if (p is null) return NotFound();
         var sums = await db.TaskMandaySummaries.Where(s => s.ProjectId == id).ToListAsync();
-        return Ok(ToDto(p, sums));
+        return Ok(ToDto(p, sums, (await BillingByProjectAsync(id)).GetValueOrDefault(id)));
     }
 
     [HttpGet("{id:int}/summary")]
@@ -141,7 +153,7 @@ public class ProjectsController(QtmDbContext db) : ControllerBase
         await db.SaveChangesAsync();
         await db.Entry(p).Reference(x => x.Customer).LoadAsync();
         var sums = await db.TaskMandaySummaries.Where(s => s.ProjectId == p.ProjectId).ToListAsync();
-        return Ok(ToDto(p, sums));
+        return Ok(ToDto(p, sums, (await BillingByProjectAsync(p.ProjectId)).GetValueOrDefault(p.ProjectId)));
     }
 
     [HttpDelete("{id:int}")]

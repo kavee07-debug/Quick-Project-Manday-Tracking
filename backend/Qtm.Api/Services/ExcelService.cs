@@ -7,7 +7,8 @@ namespace Qtm.Api.Services;
 // against the database (codes/names -> ids) so the service stays persistence-free.
 public record ProjectRow(string Code, string Name, string? CustomerCode, string? CustomerName, string? Description, string? Type, string Status, decimal? Progress, decimal? Revenue, DateOnly? StartDate, DateOnly? EndDate);
 public record TaskRow(string ProjectCode, string TaskName, string? Description, string Status, int SortOrder);
-public record MandayRow(string ProjectCode, string TaskName, string EntryType, string? ResourceName, decimal Manday, DateOnly? StartDate, DateOnly? EndDate, string? Note);
+public record MandayRow(string ProjectCode, string TaskName, string EntryType, string? ResourceName, decimal Manday, DateOnly? StartDate, DateOnly? EndDate, string? Note,
+    decimal? BillingManday = null);   // Budget rows only; last column, so older 8-column files still import
 // Progress update sheet — only Project No (Code), Name, Progress, Status.
 public record ProgressRow(string Code, string Name, decimal? Progress, string Status);
 public record CustomerRow(string Code, string Name, bool IsActive);
@@ -153,9 +154,10 @@ public class ExcelService
     // ---------- Mandays (Estimate & Actual) ----------
     public byte[] WriteMandays(IEnumerable<MandayRow> rows)
     {
-        var headers = new[] { "Project", "Task", "Type", "Resource", "Manday", "StartDate", "EndDate", "Note" };
+        var headers = new[] { "Project", "Task", "Type", "Resource", "Manday", "StartDate", "EndDate", "Note", "Billing" };
         return Build("EstimateActual", headers, rows, (ws, r, row) =>
         {
+            if (row.BillingManday is decimal billing) ws.Cell(r, 9).Value = billing;
             ws.Cell(r, 1).Value = row.ProjectCode;
             ws.Cell(r, 2).Value = row.TaskName;
             ws.Cell(r, 3).Value = row.EntryType;
@@ -177,7 +179,8 @@ public class ExcelService
             Manday: ParseDecimal(cells(5)),
             StartDate: ParseDate(cells(6)),
             EndDate: ParseDate(cells(7)),
-            Note: NullIfEmpty(cells(8))),
+            Note: NullIfEmpty(cells(8)),
+            BillingManday: ParseDecimalNullable(cells(9))),
             requiredFirstCol: true);
     }
 

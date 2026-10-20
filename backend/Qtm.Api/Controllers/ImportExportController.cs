@@ -341,7 +341,8 @@ public class ImportExportController(QtmDbContext db, ExcelService excel) : Contr
             .OrderBy(m => m.Task!.Project!.Code).ThenBy(m => m.Task!.Name).ThenBy(m => m.EntryType)
             .Select(m => new MandayRow(
                 m.Task!.Project!.Code, m.Task!.Name, m.EntryType,
-                m.Resource != null ? m.Resource.Name : null, m.Manday, m.StartDate, m.EndDate, m.Note))
+                m.Resource != null ? m.Resource.Name : null, m.Manday, m.StartDate, m.EndDate, m.Note,
+                m.BillingManday))
             .ToListAsync();
         return Xlsx(excel.WriteMandays(rows), "estimate-actual.xlsx");
     }
@@ -414,11 +415,19 @@ public class ImportExportController(QtmDbContext db, ExcelService excel) : Contr
                 skipped++;
                 continue;
             }
+            // Billing is a Budget-row estimate; on other types the column is ignored.
+            var billing = row.EntryType == "Budget" ? row.BillingManday : null;
+            if (billing is decimal b && (b < 0 || decimal.Round(b, 3) != b))
+            {
+                errors.Add($"แถว {line}: Billing ต้องไม่ติดลบ และมีทศนิยมได้ไม่เกิน 3 ตำแหน่ง");
+                skipped++;
+                continue;
+            }
 
             db.MandayEntries.Add(new MandayEntry
             {
                 TaskId = task.TaskId, EntryType = row.EntryType, ResourceId = resourceId,
-                Manday = row.Manday, StartDate = row.StartDate, EndDate = row.EndDate,
+                Manday = row.Manday, BillingManday = billing, StartDate = row.StartDate, EndDate = row.EndDate,
                 Note = row.Note, CreatedAt = DateTime.UtcNow,
             });
             created++;

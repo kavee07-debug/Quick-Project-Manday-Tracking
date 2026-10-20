@@ -32,7 +32,7 @@ const newProjectLabel = navigator.language.toLowerCase().startsWith('th')
 
 type SortKey =
   | 'code' | 'name' | 'customer' | 'type' | 'status' | 'progress'
-  | 'revenue' | 'totalBudget' | 'totalAdjust' | 'totalActual' | 'remaining';
+  | 'revenue' | 'totalBudget' | 'totalAdjust' | 'totalActual' | 'remaining' | 'totalBilling';
 
 // Table columns in display order. `num` right-aligns; the actions column is not sortable.
 const COLUMNS: { key: SortKey; label: string; num?: boolean; nowrap?: boolean; minWidth?: number }[] = [
@@ -47,6 +47,7 @@ const COLUMNS: { key: SortKey; label: string; num?: boolean; nowrap?: boolean; m
   { key: 'totalAdjust', label: 'Sum Adjust', num: true },
   { key: 'totalActual', label: 'Sum Actual', num: true },
   { key: 'remaining', label: 'คงเหลือ', num: true },
+  { key: 'totalBilling', label: 'Sum Billing', num: true },
 ];
 
 function sortValue(p: Project, key: SortKey): string | number | null {
@@ -62,6 +63,7 @@ function sortValue(p: Project, key: SortKey): string | number | null {
     case 'totalAdjust': return p.totalAdjust;
     case 'totalActual': return p.totalActual;
     case 'remaining': return p.remaining;
+    case 'totalBilling': return p.totalBilling;
   }
 }
 
@@ -424,9 +426,9 @@ export default function ProjectListPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={12} className="muted">กำลังโหลด…</td></tr>
+              <tr><td colSpan={13} className="muted">กำลังโหลด…</td></tr>
             ) : sorted.length === 0 ? (
-              <tr><td colSpan={12} className="muted">{query || statusFilter.size > 0 || typeFilter.size > 0 ? 'ไม่พบโปรเจกต์ตามเงื่อนไข' : 'ยังไม่มีโปรเจกต์'}</td></tr>
+              <tr><td colSpan={13} className="muted">{query || statusFilter.size > 0 || typeFilter.size > 0 ? 'ไม่พบโปรเจกต์ตามเงื่อนไข' : 'ยังไม่มีโปรเจกต์'}</td></tr>
             ) : (
               paged.map((p) => (
                 <tr key={p.projectId}>
@@ -455,6 +457,9 @@ export default function ProjectListPage() {
                   <td className="num">{fmt(p.totalAdjust)}</td>
                   <td className="num">{fmt(p.totalActual)}</td>
                   <td className={`num ${p.remaining < 0 ? 'over-budget' : ''}`}>{fmt(p.remaining)}</td>
+                  <td className="num" title="ผลรวม Billing ที่ประมาณไว้ในรายการ Budget">
+                    {p.totalBilling ? p.totalBilling.toLocaleString(undefined, { maximumFractionDigits: 3 }) : <span className="muted">—</span>}
+                  </td>
                   <td className="num">
                     {isManager && (
                       <span className="projects__actions">

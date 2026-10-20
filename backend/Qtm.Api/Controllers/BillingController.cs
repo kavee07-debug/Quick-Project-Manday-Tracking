@@ -181,7 +181,8 @@ public class BillingController(QtmDbContext db, ExcelService excel, D365BcClient
         var columns = new List<ExcelColumn>
         {
             new("Document No.", ExcelColumnKind.Text), new("Posting Date", ExcelColumnKind.Date),
-            new("Job No.", ExcelColumnKind.Text), new("ชื่อ Job", ExcelColumnKind.Text),
+            new("Job No.", ExcelColumnKind.Text), new("Project Task", ExcelColumnKind.Text),
+            new("ชื่อ Job", ExcelColumnKind.Text),
             new("Project Manager", ExcelColumnKind.Text), new("ลูกค้า", ExcelColumnKind.Text),
             new("Type", ExcelColumnKind.Text), new("No.", ExcelColumnKind.Text), new("รายการ", ExcelColumnKind.Text),
             new("Quantity", ExcelColumnKind.Quantity, Sum: true), new("UOM", ExcelColumnKind.Text),
@@ -205,7 +206,7 @@ public class BillingController(QtmDbContext db, ExcelService excel, D365BcClient
                 : allocated != 0 ? "Allocate ไม่ครบ" : "ยังไม่ Allocate";
             var row = new List<object?>
             {
-                d.DocumentNo, d.PostingDate, d.ProjectNo, d.JobName, d.ProjectManager,
+                d.DocumentNo, d.PostingDate, d.ProjectNo, d.ProjectTaskNo, d.JobName, d.ProjectManager,
                 d.CustomerSearchName ?? d.CustomerName, d.LineType, d.ItemNo, d.Description,
                 d.Quantity, d.UnitOfMeasure, d.LineAmount, d.MandayRate,
                 d.ConfirmedBy, status, d.BillingManday,

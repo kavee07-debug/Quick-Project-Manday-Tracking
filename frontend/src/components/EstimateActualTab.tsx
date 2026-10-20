@@ -18,8 +18,15 @@ function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-interface FormState extends MandayUpsert {
+const md3 = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 3 });
+/** Sum of the Billing estimate over Budget rows (rounded to 3 dp, like the stored values). */
+const sumBilling = (rows: MandayEntry[]) =>
+  Math.round(rows.reduce((s, e) => s + (e.entryType === 'Budget' ? e.billingManday ?? 0 : 0), 0) * 1000) / 1000;
+
+// `billing` is the input's text, so a half-typed value ("1.") isn't reformatted while typing.
+interface FormState extends Omit<MandayUpsert, 'billingManday'> {
   taskId: number;
+  billing: string;
 }
 
 /** `reloadKey` lets the page's Refresh button re-fetch without remounting (local UI state is kept). */
@@ -91,10 +98,11 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue, proj
       { budget: 0, adjust: 0, actual: 0, remaining: 0 },
     );
   }, [summary]);
+  const billingTotal = useMemo(() => sumBilling(Object.values(entriesByTask).flat()), [entriesByTask]);
 
   function openAdd(taskId: number) {
     setEditingId(null);
-    setForm({ taskId, entryType: allowedTypes[0], resourceId: null, manday: 0, entryDate: null, startDate: null, endDate: null, note: '' });
+    setForm({ taskId, entryType: allowedTypes[0], resourceId: null, manday: 0, entryDate: null, startDate: null, endDate: null, note: '', billing: '' });
     setFormError(null);
     setShowForm(true);
   }
@@ -110,6 +118,7 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue, proj
       startDate: e.startDate ?? null,
       endDate: e.endDate ?? null,
       note: e.note ?? '',
+      billing: e.billingManday != null ? String(e.billingManday) : '',
     });
     setFormError(null);
     setShowForm(true);
@@ -123,7 +132,18 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue, proj
       setFormError('End Date ต้องไม่ก่อน Start Date');
       return;
     }
+    // Billing: Budget rows only, blank = not estimated, at most 3 decimals.
+    let billingManday: number | null = null;
+    if (form.entryType === 'Budget' && form.billing.trim() !== '') {
+      const t = form.billing.trim();
+      if (!/^\d+(\.\d{1,3})?$/.test(t)) {
+        setFormError('Billing ต้องเป็นตัวเลขไม่ติดลบ ทศนิยมไม่เกิน 3 ตำแหน่ง');
+        return;
+      }
+      billingManday = Number(t);
+    }
     const payload: MandayUpsert = {
+      billingManday,
       entryType: form.entryType,
       resourceId: form.resourceId ? Number(form.resourceId) : null,
       manday: form.manday,
@@ -184,6 +204,10 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue, proj
           <div className="statcard__label">Sum Actual</div>
           <div className="statcard__value">{fmt(projectTotals.actual)}</div>
         </div>
+        <div className="statcard statcard--teal" title="ผลรวม Billing ที่ประมาณไว้ในรายการ Budget">
+          <div className="statcard__label">Sum Billing (ประมาณการ)</div>
+          <div className="statcard__value">{md3(billingTotal)}</div>
+        </div>
         <div className={`statcard ${projectTotals.remaining < 0 ? 'statcard--red' : 'statcard--navy'}`}>
           <div className="statcard__label">คงเหลือ = (Budget+Adjust)−Actual</div>
           <div className={`statcard__value ${projectTotals.remaining < 0 ? 'over-budget' : ''}`}>
@@ -213,6 +237,7 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue, proj
                   <span className="muted ea__task-sub">
                     Budget {fmt(s.totalBudget)} · Adjust {fmt(s.totalAdjust)} · Actual {fmt(s.totalActual)} · คงเหลือ{' '}
                     <span className={s.remaining < 0 ? 'over-budget' : ''}>{fmt(s.remaining)}</span>
+                    {' '}· Billing (ประมาณการ) {md3(sumBilling(rows))}
                   </span>
                 )}
               </div>
@@ -236,6 +261,7 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue, proj
                   <th>Resource</th>
                   <th>Position</th>
                   <th className="num">Manday</th>
+                  <th className="num" title="Budget: ประมาณการ Manday ที่คนนี้จะถูก Billing ใน Task นี้">Billing</th>
                   <th>Start</th>
                   <th>End</th>
                   <th>Note</th>
@@ -244,7 +270,7 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue, proj
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={10} className="muted">ยังไม่มีรายการ</td></tr>
+                  <tr><td colSpan={11} className="muted">ยังไม่มีรายการ</td></tr>
                 ) : (
                   rows.map((e) => (
                     <tr key={e.mandayEntryId}>
@@ -254,6 +280,11 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue, proj
                       <td>{e.resourceName ?? '—'}</td>
                       <td><PositionBadge position={e.resourcePosition} /></td>
                       <td className="num">{fmt(e.manday)}</td>
+                      <td className="num">
+                        {e.entryType === 'Budget' && e.billingManday != null
+                          ? md3(e.billingManday)
+                          : <span className="muted">—</span>}
+                      </td>
                       <td className="muted">{e.startDate ?? '—'}</td>
                       <td className="muted">{e.endDate ?? '—'}</td>
                       <td className="muted">{e.note ?? ''}</td>
@@ -293,6 +324,14 @@ export function EstimateActualTab({ projectId, projectCode, projectRevenue, proj
             <label className="field-label">Manday</label>
             <input className="input" type="number" step="0.5" min="0" value={form.manday}
               onChange={(ev) => setForm({ ...form, manday: Number(ev.target.value) })} required />
+
+            {form.entryType === 'Budget' && (
+              <>
+                <label className="field-label">Billing (Manday) — ประมาณการที่จะถูก Billing</label>
+                <input className="input" inputMode="decimal" value={form.billing} placeholder="เช่น 1.125 (ทศนิยมไม่เกิน 3 ตำแหน่ง)"
+                  onChange={(ev) => setForm({ ...form, billing: ev.target.value })} />
+              </>
+            )}
 
             <label className="field-label">Start Date</label>
             <input className="input" type="date" value={form.startDate ?? ''}
